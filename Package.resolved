@@ -4,7 +4,7 @@
     {
       "identity" : "ainkradappkit",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/AhmedMElhalaby/AinkradAppKit",
+      "location" : "https://github.com/AinkradHQ/AinkradAppKit",
       "state" : {
         "revision" : "91ed630a24dc187f8988c104d16a640d3ee7562c"
       }

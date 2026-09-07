@@ -15,7 +15,7 @@ export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode-beta.app/Contents/Dev
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-GITHUB_REPO="AhmedMElhalaby/AinkradKit"
+GITHUB_REPO="AinkradHQ/AinkradKit"
 BIN_NAME="ainkrad"
 
 VERSION=""
