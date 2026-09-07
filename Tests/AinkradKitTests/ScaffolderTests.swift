@@ -73,7 +73,19 @@ private func makeTempDirectory() -> URL {
     #expect(plist["AinkradDisplayName"] as? String == "My Widget")
     #expect(plist["AinkradIconSymbol"] as? String == "star.fill")
     #expect(plist["AinkradAPIVersion"] as? Int == AinkradAppKit.apiVersion)
-    #expect(AinkradAppKit.apiVersion == 8)
+    // A deliberate tripwire, not a duplicate of the line above: it fires when
+    // the CLI's SDK pin moves, so somebody has to notice that newly
+    // scaffolded apps will target a different generation from here on. Update
+    // it consciously.
+    //
+    // Moved 8 → 9 when the pin went to AinkradAppKit 30ccbe6 for M3's
+    // SignalWire and socket client. Generation 9 is the current SDK and
+    // minSupportedAPIVersion is 8, so a freshly scaffolded app targets 9 and
+    // still loads in any host from generation 9 onward.
+    // Moved 9 -> 10 with the pin to AinkradAppKit 8944e95. Newly scaffolded
+    // apps now target generation 10; minSupportedAPIVersion is 8, so they load
+    // in any host from generation 8 onward.
+    #expect(AinkradAppKit.apiVersion == 10)
     #expect((plist["AinkradAuthor"] as? String)?.isEmpty == false)
     #expect((plist["description"] as? String)?.isEmpty == false)
     #expect(plist["NSPrincipalClass"] as? String == "MyWidgetEntryPoint")
@@ -219,4 +231,50 @@ private func makeTempDirectory() -> URL {
     #expect(projectYML.contains("PRODUCT_BUNDLE_IDENTIFIER: com.example.plugin.my-app"))
 
     assertNoPlaceholderTokensRemain(under: destination)
+}
+
+/// The tripwire for the scaffolded SDK pin.
+///
+/// `ainkrad new` writes a project.yml pinning `TemplateScaffolder.sdkRevision`,
+/// while the stamped `AinkradAPIVersion` comes from the CLI's own linked SDK.
+/// If those two disagree, a new app declares one generation and links another —
+/// which is precisely what had happened: the template still carried a
+/// generation-8 revision long after the CLI moved on.
+@Suite("Scaffolded SDK pin")
+struct ScaffoldedSDKPinTests {
+    @Test("the scaffolded revision is the one this CLI is built against")
+    func pinMatchesPackage() throws {
+        // Read from Package.swift rather than a second constant: a constant
+        // compared to a constant tests only that someone typed the same thing
+        // twice, which is the mistake this is here to catch.
+        let packageURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()   // AinkradKitTests
+            .deletingLastPathComponent()   // Tests
+            .deletingLastPathComponent()   // package root
+            .appendingPathComponent("Package.swift")
+        let manifest = try String(contentsOf: packageURL, encoding: .utf8)
+
+        let pinned = manifest
+            .components(separatedBy: "AinkradAppKit")
+            .dropFirst()
+            .compactMap { chunk -> String? in
+                guard let start = chunk.range(of: "revision: \"") else { return nil }
+                let rest = chunk[start.upperBound...]
+                guard let end = rest.firstIndex(of: "\"") else { return nil }
+                return String(rest[..<end])
+            }
+            .first
+
+        let actual = try #require(pinned, "could not find the AinkradAppKit pin in Package.swift")
+        // A new app must not link a different SDK than the tool that made it.
+        #expect(TemplateScaffolder.sdkRevision == actual,
+                "the scaffolded pin does not match the CLI's own SDK pin")
+    }
+
+    @Test("the placeholder is not itself the real revision")
+    func placeholderIsDistinct() {
+        // If these ever became equal the substitution would be a no-op and
+        // the drift would return silently.
+        #expect(TemplateScaffolder.templateSDKRevision != TemplateScaffolder.sdkRevision)
+    }
 }

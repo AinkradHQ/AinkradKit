@@ -107,6 +107,17 @@ struct TemplateScaffolder {
     /// Sequential passes would re-scan and corrupt text a prior pass just
     /// inserted; a single scan that only ever advances past *source* text
     /// cannot.
+    /// The placeholder revision written in the template's `project.yml`.
+    /// Never resolved by SwiftPM — it exists only to be replaced.
+    static let templateSDKRevision = "60036ad9abe5d0ca4e84109bcc78a51f7b8578f0"
+
+    /// The SDK revision a freshly scaffolded app pins.
+    ///
+    /// Must equal the revision this CLI itself is built against, or a new app
+    /// links a different SDK than the tool that made it. `ScaffolderTests`
+    /// reads Package.swift and asserts exactly that.
+    static let sdkRevision = "8944e959ddeaae2475709ae5e6ef0afd83bb0623"
+
     private static func substitutions(
         name: String, id: String, displayName: String, icon: String
     ) -> [(token: String, replacement: String)] {
@@ -116,6 +127,21 @@ struct TemplateScaffolder {
                 replacement: "<key>AinkradAPIVersion</key><integer>\(AinkradAppKit.apiVersion)</integer>"
             ),
             (token: "\"apiVersion\": 1,", replacement: "\"apiVersion\": \(AinkradAppKit.apiVersion),"),
+            // The SDK revision the scaffolded project PINS.
+            //
+            // Substituted rather than left as the template's literal, because
+            // the two halves had drifted: `AinkradAPIVersion` above is stamped
+            // from the CLI's own linked SDK, while the template's project.yml
+            // carried a hard-coded generation-8 revision. `ainkrad new` was
+            // producing a project that DECLARED the current generation and
+            // LINKED generation 8 — a bundle claiming capability it was not
+            // built against, which is the failure the whole pin discipline
+            // exists to prevent.
+            //
+            // `sdkRevision` is asserted against Package.swift's actual pin by
+            // `ScaffolderTests`, so a future pin bump that forgets this line
+            // fails a test instead of shipping a mismatched scaffold.
+            (token: Self.templateSDKRevision, replacement: Self.sdkRevision),
             (token: "puzzlepiece.extension", replacement: icon),
             (token: "MyPluginEntryPoint", replacement: "\(name)EntryPoint"),
             (token: "TemplatePlugin", replacement: name),

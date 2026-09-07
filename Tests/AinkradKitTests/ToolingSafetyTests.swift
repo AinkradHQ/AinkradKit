@@ -115,7 +115,15 @@ struct TemplatePublishPathTests {
         for case let url as URL in walker {
             guard url.pathExtension != "plist",   // Info.plist is stamped from the SDK, correctly
                   let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
-            #expect(!text.contains("\"apiVersion\": 1"), "hardcoded apiVersion in \(url.lastPathComponent)")
+            // The trailing COMMA matters. The template's literal is
+            // `"apiVersion": 1,` and the check was written without it, which
+            // was fine for one-digit generations and became a false positive
+            // the moment the SDK reached 10 — `"apiVersion": 10,` contains
+            // `"apiVersion": 1`. A correctly substituted scaffold would have
+            // failed this test from generation 10 onward, with a message
+            // saying the opposite of what was true.
+            #expect(!text.contains("\"apiVersion\": 1,"),
+                    "hardcoded apiVersion in \(url.lastPathComponent)")
         }
     }
 }

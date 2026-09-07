@@ -6,6 +6,7 @@ struct Ainkrad: AsyncParsableCommand {
         commandName: "ainkrad",
         abstract: "Scaffold, build, validate, and publish Ainkrad Apps.",
         version: "0.1.0",
-        subcommands: [Doctor.self, New.self, Build.self, Validate.self, Dev.self, Publish.self]
+        subcommands: [Doctor.self, New.self, Build.self, Validate.self, Dev.self, Publish.self,
+                      Notify.self]
     )
 }
