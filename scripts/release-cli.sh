@@ -92,6 +92,27 @@ if [[ ! -f "$BUILT_DYLIB" ]]; then
 fi
 echo "dylib: $BUILT_DYLIB"
 
+# `Package.swift` declares `.copy("Resources/Template")` on the executable
+# target, so SwiftPM emits a resource bundle beside the binary and
+# `Bundle.module` resolves the template through it. Shipping the executable
+# without it produces a CLI that runs, answers --help, and then dies on the one
+# command that needs the template:
+#
+#   ainkrad/resource_bundle_accessor.swift:44: Fatal error: unable to find
+#   bundle named AinkradKit_ainkrad
+#
+# That is exactly what every Homebrew install through v0.2.0 did, because this
+# script staged only the binary and the dylib. Verified fail-closed here rather
+# than discovered by a user running `ainkrad new`.
+RESOURCE_BUNDLE_NAME="AinkradKit_ainkrad.bundle"
+BUILT_RESOURCE_BUNDLE="$(dirname "$BUILT_BIN")/${RESOURCE_BUNDLE_NAME}"
+if [[ ! -d "$BUILT_RESOURCE_BUNDLE" ]]; then
+  echo "error: expected resource bundle at $BUILT_RESOURCE_BUNDLE" >&2
+  echo "note: without it the shipped CLI cannot scaffold — \`ainkrad new\` traps." >&2
+  exit 1
+fi
+echo "resources: $BUILT_RESOURCE_BUNDLE"
+
 # 2. Package as a zip in dist/.
 DIST_DIR="${REPO_ROOT}/dist"
 mkdir -p "$DIST_DIR"
@@ -103,7 +124,23 @@ echo "-- packaging $ZIP_PATH --"
 STAGE_DIR="$(mktemp -d)"
 cp "$BUILT_BIN" "$STAGE_DIR/${BIN_NAME}"
 cp "$BUILT_DYLIB" "$STAGE_DIR/${DYLIB_NAME}"
-(cd "$STAGE_DIR" && zip -q "$ZIP_PATH" "$BIN_NAME" "$DYLIB_NAME")
+cp -R "$BUILT_RESOURCE_BUNDLE" "$STAGE_DIR/${RESOURCE_BUNDLE_NAME}"
+# -r because the resource bundle is a directory; without it zip stores an empty
+# entry and the archive looks right until something reads the template.
+(cd "$STAGE_DIR" && zip -qr "$ZIP_PATH" "$BIN_NAME" "$DYLIB_NAME" "$RESOURCE_BUNDLE_NAME")
+
+# Assert the archive really carries the template, not just the bundle folder.
+#
+# Captured into a variable rather than piped into `grep -q`: under `set -o
+# pipefail`, grep exits on first match, unzip takes SIGPIPE, and the pipeline
+# reports failure even though the match succeeded. (Same trap the host's
+# release.sh documents for `codesign | grep -q`.)
+ZIP_LISTING="$(unzip -l "$ZIP_PATH")"
+if [[ "$ZIP_LISTING" != *"${RESOURCE_BUNDLE_NAME}/Contents/Resources/Template/project.yml"* ]]; then
+  echo "error: $ZIP_PATH does not contain the scaffolding template" >&2
+  echo "$ZIP_LISTING" >&2
+  exit 1
+fi
 rm -rf "$STAGE_DIR"
 
 # 3. Compute sha256 of the zip.
@@ -135,14 +172,21 @@ class Ainkrad < Formula
   license "UNLICENSED"
 
   def install
-    # ainkrad links libAinkradAppKit.dylib via @loader_path, so the two must
-    # stay siblings. Install both into libexec and symlink the CLI into bin.
-    libexec.install "ainkrad", "libAinkradAppKit.dylib"
+    # ainkrad links libAinkradAppKit.dylib via @loader_path, and resolves its
+    # scaffolding template through Bundle.module, which looks for
+    # AinkradKit_ainkrad.bundle beside the executable. All three must stay
+    # siblings. Install them into libexec and symlink the CLI into bin.
+    libexec.install "ainkrad", "libAinkradAppKit.dylib", "AinkradKit_ainkrad.bundle"
     bin.install_symlink libexec/"ainkrad"
   end
 
   test do
     system "#{bin}/ainkrad", "--help"
+    # --help does not touch the resource bundle, so it passed for every broken
+    # build through v0.2.0. Scaffold for real: this is the assertion that the
+    # template actually shipped.
+    system "#{bin}/ainkrad", "new", "SmokeTest", "--into", testpath/"SmokeTest"
+    assert_path_exists testpath/"SmokeTest/project.yml"
   end
 end
 RUBY
