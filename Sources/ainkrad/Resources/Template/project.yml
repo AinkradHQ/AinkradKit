@@ -13,7 +13,8 @@ settings:
 packages:
   AinkradAppKit:
     url: https://github.com/AinkradHQ/AinkradAppKit
-    revision: 91ed630a24dc187f8988c104d16a640d3ee7562c
+    # `ainkrad new` fills this in with the SDK revision the CLI was built against.
+    revision: 60036ad9abe5d0ca4e84109bcc78a51f7b8578f0
 targets:
   TemplatePlugin:
     type: bundle
