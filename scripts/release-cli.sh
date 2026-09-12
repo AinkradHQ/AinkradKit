@@ -68,6 +68,27 @@ fi
 
 echo "== release-cli: ${BIN_NAME} ${VERSION} =="
 
+# 0. `ainkrad --version` prints a literal from the source, not a value stamped
+# at build time, so nothing kept it in step with the tag: it said 0.1.0 in
+# every release through v0.2.1. Refuse to ship when the two disagree — the fix
+# is a one-line bump in the release commit, not a flag here.
+#
+# Read without a pipe: under `set -o pipefail` a `| head -1` can report failure
+# on success, the same trap step 2 documents for `grep -q`. A second match
+# yields two lines, which fails the comparison loudly rather than silently.
+VERSION_SOURCE="Sources/ainkrad/Ainkrad.swift"
+SOURCE_VERSION="$(sed -nE 's/^[[:space:]]*version: "([^"]+)",?[[:space:]]*$/\1/p' "$VERSION_SOURCE")"
+if [[ -z "$SOURCE_VERSION" ]]; then
+  echo "error: could not read the version literal from $VERSION_SOURCE" >&2
+  exit 1
+fi
+if [[ "$SOURCE_VERSION" != "${VERSION#v}" ]]; then
+  echo "error: releasing ${VERSION}, but $VERSION_SOURCE says \"${SOURCE_VERSION}\"" >&2
+  echo "note: bump the literal first, or \`ainkrad --version\` ships wrong again." >&2
+  exit 1
+fi
+echo "version literal: ${SOURCE_VERSION} (matches ${VERSION})"
+
 # 1. Build a universal (arm64 + x86_64) release binary.
 echo "-- building release binary (universal) --"
 swift build -c release --arch arm64 --arch x86_64
