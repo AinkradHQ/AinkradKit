@@ -277,4 +277,40 @@ struct ScaffoldedSDKPinTests {
         // the drift would return silently.
         #expect(TemplateScaffolder.templateSDKRevision != TemplateScaffolder.sdkRevision)
     }
+
+    @Test("the template carries the placeholder, so the substitution fires")
+    func templateCarriesPlaceholder() throws {
+        // Pin bumps kept editing the template's revision to the new pin, which
+        // left `templateSDKRevision` matching nothing: the substitution became a
+        // silent no-op and only the hand edit kept the output right. The two
+        // tests above could not see it — they compare constants, not the file.
+        let templateURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()   // AinkradKitTests
+            .deletingLastPathComponent()   // Tests
+            .deletingLastPathComponent()   // package root
+            .appendingPathComponent("Sources/ainkrad/Resources/Template/project.yml")
+        let template = try String(contentsOf: templateURL, encoding: .utf8)
+        #expect(template.contains(TemplateScaffolder.templateSDKRevision),
+                "the template's AinkradAppKit revision must be the placeholder")
+        #expect(!template.contains(TemplateScaffolder.sdkRevision),
+                "the template must not carry the real pin — the scaffolder substitutes it")
+    }
+
+    @Test("a scaffolded project pins the CLI's own SDK revision")
+    func scaffoldedProjectPinsSDKRevision() throws {
+        // What the three tests above add up to, checked on the one file that
+        // matters: the project.yml `ainkrad new` actually writes.
+        let destination = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: destination) }
+
+        try TemplateScaffolder().scaffold(
+            name: "PinCheck", id: "pincheck", displayName: "Pin Check",
+            icon: "star.fill", into: destination
+        )
+
+        let project = try String(contentsOf: destination.appendingPathComponent("project.yml"),
+                                 encoding: .utf8)
+        #expect(project.contains("revision: \(TemplateScaffolder.sdkRevision)"))
+        #expect(!project.contains(TemplateScaffolder.templateSDKRevision))
+    }
 }
