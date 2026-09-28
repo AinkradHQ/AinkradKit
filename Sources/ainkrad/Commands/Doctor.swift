@@ -9,7 +9,7 @@ struct DoctorRow {
 }
 
 /// Environment probe — verifies the local toolchain the other `ainkrad`
-/// subcommands depend on (Xcode-beta, XcodeGen, gh) and reports the CLI's
+/// subcommands depend on (Xcode, XcodeGen, gh) and reports the CLI's
 /// target SDK generation.
 struct Doctor: ParsableCommand {
     static let configuration = CommandConfiguration(
@@ -25,10 +25,10 @@ struct Doctor: ParsableCommand {
 
         rows.append(DoctorRow(
             name: "Xcode",
-            passed: env.xcodeBetaPresent,
-            detail: env.xcodeBetaPresent
-                ? "Xcode-beta selected"
-                : "Xcode-beta not selected (check DEVELOPER_DIR / xcode-select -p)"
+            passed: env.xcodePresent,
+            detail: env.xcodePresent
+                ? "Xcode selected"
+                : "Xcode not selected (check DEVELOPER_DIR / xcode-select -p)"
         ))
 
         if let xcodegen = env.find("xcodegen") {

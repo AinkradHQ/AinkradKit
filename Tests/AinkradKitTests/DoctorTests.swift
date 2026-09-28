@@ -2,10 +2,10 @@ import Foundation
 import Testing
 @testable import ainkrad
 
-@Test func doctorReportsFailingXcodeRowWhenBetaAbsent() {
+@Test func doctorReportsFailingXcodeRowWhenXcodeAbsent() {
     let env = Environment(
         find: { _ in nil },
-        xcodeBetaPresent: false,
+        xcodePresent: false,
         targetGeneration: 7
     )
 
@@ -21,7 +21,7 @@ import Testing
 @Test func doctorReportsPassingRowsWhenToolsPresent() {
     let env = Environment(
         find: { tool in URL(fileURLWithPath: "/usr/local/bin/\(tool)") },
-        xcodeBetaPresent: true,
+        xcodePresent: true,
         targetGeneration: 7
     )
 
