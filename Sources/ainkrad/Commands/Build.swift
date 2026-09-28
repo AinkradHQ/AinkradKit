@@ -2,7 +2,7 @@ import ArgumentParser
 import Foundation
 
 /// `ainkrad build` — the ONE blessed build path: wraps XcodeGen + xcodebuild
-/// with the correct fixed environment (Xcode-beta via `DEVELOPER_DIR`) so
+/// with the correct fixed environment (Xcode via `DEVELOPER_DIR`) so
 /// developers never hit "which Xcode / which flag" failures.
 ///
 /// Kept thin: all building logic lives in `BundleBuilder`.
