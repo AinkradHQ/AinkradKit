@@ -3,13 +3,13 @@ import Testing
 @testable import ainkrad
 
 /// Whether this machine has the toolchain `ainkrad build` requires: an
-/// Xcode-beta install (the fixed `DEVELOPER_DIR` `BundleBuilder` targets)
+/// Xcode install (the fixed `DEVELOPER_DIR` `BundleBuilder` targets)
 /// and `xcodegen` on `PATH`. The integration test below needs both — it
 /// must skip cleanly rather than fail on a machine that lacks either.
 private func buildToolchainAvailable() -> Bool {
     guard Environment().find("xcodegen") != nil else { return false }
     return FileManager.default.fileExists(
-        atPath: "/Applications/Xcode-beta.app/Contents/Developer"
+        atPath: "/Applications/Xcode.app/Contents/Developer"
     )
 }
 
@@ -20,7 +20,7 @@ private func buildToolchainAvailable() -> Bool {
 /// limit rather than a fast timeout that could false-fail under load.
 @Test(
     "BundleBuilder builds a scaffolded app end-to-end and returns its .bundle",
-    .enabled(if: buildToolchainAvailable(), "requires Xcode-beta and xcodegen on this machine"),
+    .enabled(if: buildToolchainAvailable(), "requires Xcode and xcodegen on this machine"),
     .timeLimit(.minutes(10))
 )
 func buildsScaffoldedAppEndToEnd() throws {

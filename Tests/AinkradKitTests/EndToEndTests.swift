@@ -18,13 +18,13 @@ private struct E2EPluginManifest: Codable {
 }
 
 /// Whether this machine has the toolchain the pipeline requires: an
-/// Xcode-beta install (the fixed `DEVELOPER_DIR` `BundleBuilder` targets)
+/// Xcode install (the fixed `DEVELOPER_DIR` `BundleBuilder` targets)
 /// and `xcodegen` on `PATH`. Mirrors `BundleBuilderTests`' guard — this test
 /// must skip cleanly, not fail, on a machine that lacks either.
 private func e2eToolchainAvailable() -> Bool {
     guard Environment().find("xcodegen") != nil else { return false }
     return FileManager.default.fileExists(
-        atPath: "/Applications/Xcode-beta.app/Contents/Developer"
+        atPath: "/Applications/Xcode.app/Contents/Developer"
     )
 }
 
@@ -56,7 +56,7 @@ private func findBundle(under root: URL) -> URL? {
 /// cleanly (like `BundleBuilderTests`) when the toolchain is absent.
 @Test(
     "ainkrad new -> build -> validate -> publish --dry-run all exit 0 and publish a valid manifest",
-    .enabled(if: e2eToolchainAvailable(), "requires Xcode-beta and xcodegen on this machine"),
+    .enabled(if: e2eToolchainAvailable(), "requires Xcode and xcodegen on this machine"),
     .timeLimit(.minutes(15))
 )
 func endToEndHappyPath() throws {

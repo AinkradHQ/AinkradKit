@@ -2,32 +2,32 @@ import AinkradAppKit
 import Foundation
 
 /// Probes the local toolchain the `ainkrad` CLI depends on: an
-/// Xcode-beta developer directory, and external tools such as `xcodegen`
+/// Xcode developer directory, and external tools such as `xcodegen`
 /// and `gh` on `PATH`.
 ///
 /// The real machine probes (`Environment()`) shell out to `xcode-select`
 /// and `which`. For deterministic tests, use the injecting initializer to
-/// stub tool lookup and Xcode-beta detection without touching the real
+/// stub tool lookup and Xcode detection without touching the real
 /// machine.
 struct Environment {
     private let findTool: (String) -> URL?
 
-    /// Whether the selected Xcode developer directory is Xcode-beta.
-    let xcodeBetaPresent: Bool
+    /// Whether the selected Xcode developer directory is Xcode.
+    let xcodePresent: Bool
 
     /// The API generation `ainkrad` targets — mirrors `AinkradAppKit.apiVersion`.
     let targetGeneration: Int
 
-    /// Injectable initializer for tests: stub `find` and `xcodeBetaPresent`
+    /// Injectable initializer for tests: stub `find` and `xcodePresent`
     /// to report an environment deterministically, without touching the
     /// real filesystem or `PATH`.
     init(
         find: @escaping (String) -> URL?,
-        xcodeBetaPresent: Bool,
+        xcodePresent: Bool,
         targetGeneration: Int = AinkradAppKit.apiVersion
     ) {
         self.findTool = find
-        self.xcodeBetaPresent = xcodeBetaPresent
+        self.xcodePresent = xcodePresent
         self.targetGeneration = targetGeneration
     }
 
@@ -36,7 +36,7 @@ struct Environment {
     init() {
         self.init(
             find: Environment.locate,
-            xcodeBetaPresent: Environment.detectXcodeBetaPresent()
+            xcodePresent: Environment.detectXcodePresent()
         )
     }
 
@@ -50,14 +50,14 @@ struct Environment {
         return URL(fileURLWithPath: path)
     }
 
-    private static func detectXcodeBetaPresent() -> Bool {
+    private static func detectXcodePresent() -> Bool {
         if let developerDir = ProcessInfo.processInfo.environment["DEVELOPER_DIR"] {
-            return developerDir.contains("Xcode-beta")
+            return developerDir.contains("/Xcode.app")
         }
         guard let selectedPath = run("/usr/bin/xcode-select", arguments: ["-p"]) else {
             return false
         }
-        return selectedPath.contains("Xcode-beta")
+        return selectedPath.contains("/Xcode.app")
     }
 
     /// Runs `executable` with `arguments`, returning trimmed stdout on

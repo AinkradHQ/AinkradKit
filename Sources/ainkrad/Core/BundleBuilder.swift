@@ -14,10 +14,10 @@ struct BundleBuilderError: Error, CustomStringConvertible {
 ///
 /// `xcodegen`/`xcodebuild` are resolved via `PATH` (through `Environment`,
 /// not hardcoded paths); the toolchain itself is pinned by setting
-/// `DEVELOPER_DIR` to Xcode-beta in the child process environment.
+/// `DEVELOPER_DIR` to Xcode in the child process environment.
 struct BundleBuilder {
     /// The one true toolchain every `ainkrad build` invocation targets.
-    private static let developerDirectoryPath = "/Applications/Xcode-beta.app/Contents/Developer"
+    private static let developerDirectoryPath = "/Applications/Xcode.app/Contents/Developer"
 
     private let environment: Environment
 
@@ -29,7 +29,7 @@ struct BundleBuilder {
     }
 
     /// Generates the Xcode project for `projectDir` with XcodeGen, builds
-    /// its scheme with xcodebuild against Xcode-beta, and returns the path
+    /// its scheme with xcodebuild against Xcode, and returns the path
     /// to the produced `.bundle`.
     func build(projectDir: URL) throws -> URL {
         guard let xcodegen = environment.find("xcodegen") else {
@@ -111,7 +111,7 @@ struct BundleBuilder {
     }
 
     /// Runs `executable` with `arguments` in `currentDirectory`, with
-    /// `DEVELOPER_DIR` pinned to Xcode-beta in the child environment.
+    /// `DEVELOPER_DIR` pinned to Xcode in the child environment.
     /// Returns trimmed stdout on success (exit code 0); on failure, throws
     /// with the child's stderr included verbatim so the real
     /// xcodegen/xcodebuild failure reaches the developer.
