@@ -9,7 +9,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
-        .package(url: "https://github.com/AinkradHQ/AinkradAppKit", revision: "8682286ead7081a57e2a1e10ae8b294fdbad9b09"),
+        .package(url: "https://github.com/AinkradHQ/AinkradAppKit", revision: "2d8c31d08fae964901904f5232b58c5c142d706e"),
     ],
     targets: [
         .executableTarget(
