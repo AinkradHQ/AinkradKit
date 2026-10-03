@@ -319,3 +319,107 @@ struct ScaffoldedSDKPinTests {
         #expect(!project.contains(TemplateScaffolder.templateSDKRevision))
     }
 }
+
+/// Task 2.6: `ainkrad new` produces a plugin that lints and hooks from day
+/// one. Scaffolds into a temp dir, asserts the 8 guardrail files exist and
+/// are byte-identical to the embedded copies, that every file under
+/// `scripts/` (including the pre-push hook) is executable, and that a
+/// `git init` + `scripts/design-lint.sh --check` in the scaffold exits 0.
+@Test func scaffoldedPluginShipsExecutableGuardrailsThatPassLintCheck() throws {
+    let destination = makeTempDirectory()
+    defer { try? FileManager.default.removeItem(at: destination) }
+
+    try TemplateScaffolder().scaffold(
+        name: "MyWidget",
+        id: "myapp",
+        displayName: "My Widget",
+        icon: "star.fill",
+        into: destination
+    )
+
+    let templateURL = try TemplateScaffolder.embeddedTemplateURL()
+
+    // The 8 synced guardrail files (same set `guardrails-sync.sh`
+    // distributes): they must exist and be byte-identical to the embedded
+    // copies the scaffolder copied them from.
+    let guardrailFiles = [
+        "scripts/design-lint.sh",
+        "scripts/design-lint-awk.awk",
+        "scripts/design-lint-baseline.sh",
+        "scripts/design-lint-selftest.sh",
+        "scripts/design-lint-selftest-ratchet.sh",
+        "scripts/git-hooks/pre-push",
+        "scripts/guardrails.mk",
+        ".swift-format",
+    ]
+    for relative in guardrailFiles {
+        let scaffoldedURL = destination.appendingPathComponent(relative)
+        #expect(
+            FileManager.default.fileExists(atPath: scaffoldedURL.path),
+            "scaffold is missing guardrail file \(relative)"
+        )
+        let scaffoldedData = try? Data(contentsOf: scaffoldedURL)
+        let embeddedData = try? Data(contentsOf: templateURL.appendingPathComponent(relative))
+        #expect(
+            scaffoldedData != nil && scaffoldedData == embeddedData,
+            "\(relative) differs from the embedded template copy"
+        )
+    }
+
+    // The scaffolded baseline (all zeros — a fresh plugin has no history to
+    // ratchet) and the Makefile lint wiring travel with the same change.
+    #expect(
+        FileManager.default.fileExists(
+            atPath: destination.appendingPathComponent(".design-lint-baseline").path
+        )
+    )
+    let makefile = try String(
+        contentsOf: destination.appendingPathComponent("Makefile"), encoding: .utf8
+    )
+    #expect(makefile.contains("build: lint generate"))
+    #expect(makefile.contains("include scripts/guardrails.mk"))
+
+    // Every file under scripts/ (including the hook) must be executable in
+    // the scaffold, not just in the repo: SPM `.copy` resources may lose the
+    // exec bit on the way into the bundle, in which case `TemplateScaffolder`
+    // restores 0755 explicitly.
+    let scriptsURL = destination.appendingPathComponent("scripts", isDirectory: true)
+    guard let enumerator = FileManager.default.enumerator(
+        at: scriptsURL, includingPropertiesForKeys: [.isRegularFileKey]
+    ) else {
+        Issue.record("could not enumerate scaffolded scripts/")
+        return
+    }
+    var scriptCount = 0
+    for case let url as URL in enumerator {
+        guard (try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else {
+            continue
+        }
+        scriptCount += 1
+        let permissions =
+            (try? FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as? NSNumber)?
+            .uint16Value ?? 0
+        #expect(
+            permissions & 0o111 == 0o111,
+            "\(url.lastPathComponent) is not executable (mode 0\(String(permissions, radix: 8)))"
+        )
+    }
+    #expect(scriptCount == 7)
+
+    // A fresh scaffold must pass the lint gate: `git init` + stage (so the
+    // tracked-only `--check` sees the files) + `--check` exits 0.
+    let git = URL(fileURLWithPath: "/usr/bin/git")
+    let initResult = try ProcessRunner.run(git, arguments: ["init", "-q"], currentDirectory: destination)
+    #expect(initResult.succeeded, "git init failed: \(initResult.standardError)")
+    let addResult = try ProcessRunner.run(git, arguments: ["add", "-A"], currentDirectory: destination)
+    #expect(addResult.succeeded, "git add failed: \(addResult.standardError)")
+    let checkResult = try ProcessRunner.run(
+        destination.appendingPathComponent("scripts/design-lint.sh"),
+        arguments: ["--check"],
+        currentDirectory: destination
+    )
+    #expect(
+        checkResult.exitCode == 0,
+        "design-lint.sh --check failed:\n\(checkResult.standardOutput)\n\(checkResult.standardError)"
+    )
+}

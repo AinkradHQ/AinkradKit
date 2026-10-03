@@ -8,7 +8,7 @@ export DEVELOPER_DIR
 DEV_PLUGINS := $(HOME)/Library/Application Support/com.ainkrad.app/Cache/DevPlugins
 
 generate: ; xcodegen generate
-build: generate ; xcodebuild -scheme TemplatePlugin -configuration Debug -derivedDataPath build -destination 'platform=macOS' build
+build: lint generate ; xcodebuild -scheme TemplatePlugin -configuration Debug -derivedDataPath build -destination 'platform=macOS' build
 sideload: build
 	mkdir -p "$(DEV_PLUGINS)"
 	rm -rf "$(DEV_PLUGINS)/TemplatePlugin.bundle"
@@ -24,3 +24,7 @@ sideload: build
 # Deleted. `ainkrad publish` runs the same validation the store does.
 release: releasebuild ; ainkrad publish build/Build/Products/Release/TemplatePlugin.bundle $(V)
 releasebuild: generate ; xcodebuild -scheme TemplatePlugin -configuration Release -derivedDataPath build -destination 'platform=macOS' build
+
+.PHONY: generate build sideload release releasebuild
+
+include scripts/guardrails.mk
