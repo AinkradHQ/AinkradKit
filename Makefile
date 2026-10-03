@@ -1,5 +1,7 @@
 .PHONY: build test
-build:
+build: lint
 	swift build -c release
-test:
+test: lint
 	swift test
+
+include scripts/guardrails.mk
