@@ -21,6 +21,21 @@ struct TemplateScaffolder {
     /// in `Package.swift` (`.copy("Resources/Template")`).
     private static let templateResourceName = "Template"
 
+    /// The on-disk URL of the embedded template directory, as served by
+    /// this target's resource bundle. Exposed (internal) so `ScaffolderTests`
+    /// can compare scaffolded output byte-for-byte against the embedded
+    /// copies it came from.
+    static func embeddedTemplateURL() throws -> URL {
+        guard let templateURL = Bundle.module.url(
+            forResource: TemplateScaffolder.templateResourceName, withExtension: nil
+        ) else {
+            throw TemplateScaffolderError(
+                description: "Embedded template resources not found in the ainkrad bundle."
+            )
+        }
+        return templateURL
+    }
+
     func scaffold(
         name: String,
         id: String,
@@ -41,13 +56,7 @@ struct TemplateScaffolder {
             )
         }
 
-        guard let templateURL = Bundle.module.url(
-            forResource: TemplateScaffolder.templateResourceName, withExtension: nil
-        ) else {
-            throw TemplateScaffolderError(
-                description: "Embedded template resources not found in the ainkrad bundle."
-            )
-        }
+        let templateURL = try Self.embeddedTemplateURL()
 
         let fileManager = FileManager.default
 
@@ -81,6 +90,14 @@ struct TemplateScaffolder {
         try TemplateScaffolder.copyAndSubstitute(
             from: templateURL, to: destination, replacements: replacements, fileManager: fileManager
         )
+
+        // SPM `.copy` resources may lose the exec bit on the way into the
+        // bundle, so a scaffolded `scripts/design-lint.sh` could arrive
+        // non-executable. Everything under scripts/ is either run directly
+        // (design-lint.sh, the pre-push hook, the self-tests) or sourced by
+        // something that is — restore 0755 explicitly rather than trusting
+        // whatever permission bits the bundle happened to serve.
+        try TemplateScaffolder.makeScriptsExecutable(root: destination, fileManager: fileManager)
     }
 
     /// A valid Swift type identifier: starts with a letter or underscore,
@@ -211,6 +228,23 @@ struct TemplateScaffolder {
             } else {
                 try substituteFile(from: item, to: target, replacements: replacements, fileManager: fileManager)
             }
+        }
+    }
+
+    /// Restores the executable bit on every file under the scaffolded
+    /// `scripts/` directory (including `scripts/git-hooks/pre-push`). Called
+    /// by `scaffold` — see the comment there.
+    private static func makeScriptsExecutable(root: URL, fileManager: FileManager) throws {
+        let scriptsURL = root.appendingPathComponent("scripts", isDirectory: true)
+        guard let enumerator = fileManager.enumerator(
+            at: scriptsURL, includingPropertiesForKeys: [.isRegularFileKey]
+        ) else {
+            return
+        }
+        for case let url as URL in enumerator {
+            let values = try? url.resourceValues(forKeys: [.isRegularFileKey])
+            guard values?.isRegularFile == true else { continue }
+            try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
         }
     }
 
