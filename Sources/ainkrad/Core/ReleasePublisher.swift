@@ -11,10 +11,8 @@ struct ReleasePublisherError: Error, CustomStringConvertible {
 /// Packages a built `.bundle` into the exact asset pair the real host's
 /// `GitHubReleasesCatalogSource` consumes — `<appID>.bundle.zip` +
 /// `ainkrad-plugin.json` — and creates the GitHub Release carrying them.
-///
-/// Asset names and the zip invocation mirror the template's
-/// `scripts/release.sh` verbatim, so a bundle packaged here lands on disk
-/// identically to what the template's shell script would produce.
+/// This is the template's only release path: its `make release` calls
+/// `ainkrad publish`.
 struct ReleasePublisher {
     private let inspector: BundleInspector
 
@@ -68,9 +66,8 @@ struct ReleasePublisher {
         return (zip: zipURL, manifest: manifestURL)
     }
 
-    /// Shells `gh release create <tag> <assets...>`, mirroring the
-    /// template's `release.sh` invocation. This is the only networked part
-    /// of publishing; callers gate it behind `--dry-run`.
+    /// Shells `gh release create <tag> <assets...>`. This is the only
+    /// networked part of publishing; callers gate it behind `--dry-run`.
     func release(tag: String, assets: [URL]) throws {
         guard let gh = Environment().find("gh") else {
             throw ReleasePublisherError(description: "gh not found on PATH.")
@@ -92,8 +89,8 @@ struct ReleasePublisher {
         }
     }
 
-    /// Runs `/usr/bin/ditto -c -k --keepParent <bundle> <zipURL>`, matching
-    /// the template's `release.sh` invocation exactly.
+    /// Runs `/usr/bin/ditto -c -k --keepParent <bundle> <zipURL>`, so the zip
+    /// unpacks to `<Name>.bundle` itself.
     private static func ditto(bundle: URL, to zipURL: URL) throws {
         // Same reason as `release` above — `ditto` reports per-file progress on
         // stderr, so a bundle with enough files deadlocked the old raw-pipe form.

@@ -6,8 +6,6 @@ import Foundation
 /// for changes and rebuild+relaunch on each debounced batch. All
 /// orchestration logic lives in `DevSession`; this command's only jobs are
 /// locating the Dev Host and wiring `DevSession`'s real collaborators.
-///
-/// NOT registered as a root subcommand yet (Task 9's job).
 struct Dev: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "dev",
