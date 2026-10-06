@@ -53,14 +53,17 @@ struct Dev: ParsableCommand {
     /// Sub-project C is not built yet on every machine, so this is a real
     /// lookup, not a hardcoded assumption: an `AINKRAD_DEV_HOST_PATH`
     /// environment override first (for developers building it elsewhere),
-    /// then the documented default install location.
-    static func locateDevHost() -> URL? {
+    /// then the documented default install location. An override that
+    /// points at nothing is a miss, not a fall-through to the default.
+    static func locateDevHost(
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        defaultURL: URL = URL(fileURLWithPath: "/Applications/AinkradDevHost.app")
+    ) -> URL? {
         let fileManager = FileManager.default
-        if let overridePath = ProcessInfo.processInfo.environment["AINKRAD_DEV_HOST_PATH"] {
+        if let overridePath = environment["AINKRAD_DEV_HOST_PATH"] {
             let url = URL(fileURLWithPath: overridePath)
             return fileManager.fileExists(atPath: url.path) ? url : nil
         }
-        let defaultURL = URL(fileURLWithPath: "/Applications/AinkradDevHost.app")
         return fileManager.fileExists(atPath: defaultURL.path) ? defaultURL : nil
     }
 
@@ -97,9 +100,9 @@ private struct RealDevSessionValidator: DevSessionValidating {
 /// stdout/stderr from the developer's terminal), passing the bundle to load
 /// as `--bundle <path>`. On relaunch, the newly-spawned process replaces
 /// the previous one only after successfully starting.
-private final class DevHostProcessLauncher: DevSessionLaunching {
+final class DevHostProcessLauncher: DevSessionLaunching {
     private let devHostURL: URL
-    private var runningProcess: Process?
+    private(set) var runningProcess: Process?
 
     init(devHostURL: URL) {
         self.devHostURL = devHostURL

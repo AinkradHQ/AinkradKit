@@ -92,3 +92,55 @@ import Testing
         try command.run()
     }
 }
+
+/// `release` against a fake `gh` that records its arguments — never the real
+/// one, and never the network.
+@Suite("ReleasePublisher.release")
+struct ReleaseTests {
+    private func fakeGH(exitCode: Int32) throws -> (env: Environment, log: URL, dir: URL) {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ainkrad-release-tests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let log = dir.appendingPathComponent("args.log")
+        let gh = dir.appendingPathComponent("gh")
+        try "#!/bin/sh\necho \"$@\" > '\(log.path)'\necho 'upload refused' >&2\nexit \(exitCode)\n"
+            .write(to: gh, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: gh.path)
+        let env = Environment(find: { $0 == "gh" ? gh : nil }, xcodePresent: true)
+        return (env, log, dir)
+    }
+
+    @Test("creates the release with the tag and every asset")
+    func createsRelease() throws {
+        let (env, log, dir) = try fakeGH(exitCode: 0)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        try ReleasePublisher().release(
+            tag: "v1.2.3",
+            assets: [URL(fileURLWithPath: "/a/ainkrad-plugin.json"), URL(fileURLWithPath: "/a/x.bundle.zip")],
+            environment: env)
+
+        let args = try String(contentsOf: log, encoding: .utf8)
+        #expect(args == "release create v1.2.3 /a/ainkrad-plugin.json /a/x.bundle.zip\n")
+    }
+
+    @Test("a failing gh throws with its exit code and stderr")
+    func failingGHThrows() throws {
+        let (env, _, dir) = try fakeGH(exitCode: 3)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let error = try #require(throws: ReleasePublisherError.self) {
+            try ReleasePublisher().release(tag: "v1", assets: [], environment: env)
+        }
+        #expect(error.description.contains("exit 3"))
+        #expect(error.description.contains("upload refused"))
+    }
+
+    @Test("no gh on PATH throws before anything runs")
+    func missingGHThrows() {
+        let env = Environment(find: { _ in nil }, xcodePresent: true)
+        #expect(throws: ReleasePublisherError.self) {
+            try ReleasePublisher().release(tag: "v1", assets: [], environment: env)
+        }
+    }
+}

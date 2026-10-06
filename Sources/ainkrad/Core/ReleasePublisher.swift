@@ -68,8 +68,8 @@ struct ReleasePublisher {
 
     /// Shells `gh release create <tag> <assets...>`. This is the only
     /// networked part of publishing; callers gate it behind `--dry-run`.
-    func release(tag: String, assets: [URL]) throws {
-        guard let gh = Environment().find("gh") else {
+    func release(tag: String, assets: [URL], environment: Environment = Environment()) throws {
+        guard let gh = environment.find("gh") else {
             throw ReleasePublisherError(description: "gh not found on PATH.")
         }
 

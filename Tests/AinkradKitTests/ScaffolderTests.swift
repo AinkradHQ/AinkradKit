@@ -235,6 +235,24 @@ private func makeTempDirectory() -> URL {
     #expect(scaffolded == (try comments(template)))
 }
 
+/// The scaffolded `DEV_PLUGINS` is the host's sideload directory,
+/// `<bundle-id>/Cache/DevPlugins` — not the old `Documents/DevPlugins`.
+@Test func scaffoldedMakefileSideloadsIntoTheHostCache() throws {
+    let destination = makeTempDirectory()
+    defer { try? FileManager.default.removeItem(at: destination) }
+
+    try TemplateScaffolder().scaffold(
+        name: "MyWidget", id: "myapp", displayName: "My Widget",
+        icon: "star.fill", into: destination
+    )
+
+    let makefile = try String(contentsOf: destination.appendingPathComponent("Makefile"), encoding: .utf8)
+    #expect(
+        makefile.contains(
+            "DEV_PLUGINS := $(HOME)/Library/Application Support/com.ainkrad.app/Cache/DevPlugins\n"))
+    #expect(makefile.contains("rm -rf \"$(DEV_PLUGINS)/MyWidget.bundle\""))
+}
+
 @Test func rejectsInvalidAppID() {
     let destination = makeTempDirectory()
     defer { try? FileManager.default.removeItem(at: destination) }
