@@ -12,6 +12,9 @@
     <key>AinkradAppID</key><string>myplugin</string>
     <key>AinkradDisplayName</key><string>My Plugin</string>
     <key>AinkradIconSymbol</key><string>puzzlepiece.extension</string>
+    <!-- Placeholder: scripts/stamp-api-version.sh writes the linked SDK's
+         generation into the BUILT bundle, and `ainkrad new` substitutes this
+         exact line. Never hand-edit the number. -->
     <key>AinkradAPIVersion</key><integer>1</integer>
     <key>AinkradAuthor</key><string>Your Name</string>
     <key>description</key><string>A short description of what this app does.</string>
