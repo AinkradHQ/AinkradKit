@@ -6,6 +6,10 @@ struct DoctorRow {
     let name: String
     let passed: Bool
     let detail: String
+
+    /// The printed checklist line — plain text, so it reads the same in any
+    /// terminal and greps cleanly.
+    var line: String { "\(passed ? "ok  " : "FAIL") \(name): \(detail)" }
 }
 
 /// Environment probe — verifies the local toolchain the other `ainkrad`
@@ -23,13 +27,14 @@ struct Doctor: ParsableCommand {
     static func report(env: Environment) -> [DoctorRow] {
         var rows: [DoctorRow] = []
 
-        rows.append(DoctorRow(
-            name: "Xcode",
-            passed: env.xcodePresent,
-            detail: env.xcodePresent
-                ? "Xcode selected"
-                : "Xcode not selected (check DEVELOPER_DIR / xcode-select -p)"
-        ))
+        rows.append(
+            DoctorRow(
+                name: "Xcode",
+                passed: env.xcodePresent,
+                detail: env.xcodePresent
+                    ? "Xcode selected"
+                    : "Xcode not selected (check DEVELOPER_DIR / xcode-select -p)"
+            ))
 
         if let xcodegen = env.find("xcodegen") {
             rows.append(DoctorRow(name: "XcodeGen", passed: true, detail: xcodegen.path))
@@ -43,11 +48,12 @@ struct Doctor: ParsableCommand {
             rows.append(DoctorRow(name: "gh", passed: false, detail: "gh not found on PATH"))
         }
 
-        rows.append(DoctorRow(
-            name: "Target SDK generation",
-            passed: true,
-            detail: "\(env.targetGeneration)"
-        ))
+        rows.append(
+            DoctorRow(
+                name: "Target SDK generation",
+                passed: true,
+                detail: "\(env.targetGeneration)"
+            ))
 
         return rows
     }
@@ -55,8 +61,7 @@ struct Doctor: ParsableCommand {
     func run() throws {
         let rows = Doctor.report(env: Environment())
         for row in rows {
-            let symbol = row.passed ? "✅" : "❌"
-            print("\(symbol) \(row.name): \(row.detail)")
+            print(row.line)
         }
     }
 }

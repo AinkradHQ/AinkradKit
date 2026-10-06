@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import ainkrad
 
 /// Real integration test for `FileWatcher`: this is the exact regression
@@ -26,8 +27,16 @@ import Testing
     final class FireBox: @unchecked Sendable {
         private let lock = NSLock()
         private var fired = false
-        func markFired() { lock.lock(); fired = true; lock.unlock() }
-        func hasFired() -> Bool { lock.lock(); defer { lock.unlock() }; return fired }
+        func markFired() {
+            lock.lock()
+            fired = true
+            lock.unlock()
+        }
+        func hasFired() -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            return fired
+        }
     }
     let fireBox = FireBox()
     watcher.onChange = { fireBox.markFired() }
@@ -69,15 +78,17 @@ import Testing
     #expect(!FileWatcher.isBuildArtifact("/proj/Assets/icon.png"))
 
     // A batch of pure build output collapses to "nothing to do"...
-    #expect(FileWatcher.onlyBuildArtifactsChanged([
-        "/proj/App.xcodeproj/project.pbxproj",
-        "/proj/.ainkrad-build/Build/Products/Debug/App.bundle/x",
-    ]))
+    #expect(
+        FileWatcher.onlyBuildArtifactsChanged([
+            "/proj/App.xcodeproj/project.pbxproj",
+            "/proj/.ainkrad-build/Build/Products/Debug/App.bundle/x",
+        ]))
     // ...but a batch mixing a real edit with build output still rebuilds.
-    #expect(!FileWatcher.onlyBuildArtifactsChanged([
-        "/proj/.ainkrad-build/Build/x",
-        "/proj/Sources/Plugin/PluginApp.swift",
-    ]))
+    #expect(
+        !FileWatcher.onlyBuildArtifactsChanged([
+            "/proj/.ainkrad-build/Build/x",
+            "/proj/Sources/Plugin/PluginApp.swift",
+        ]))
     // An empty batch is nothing to do.
     #expect(FileWatcher.onlyBuildArtifactsChanged([]))
 }

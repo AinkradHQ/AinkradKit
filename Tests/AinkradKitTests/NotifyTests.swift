@@ -1,6 +1,7 @@
-import Testing
-import Foundation
 import AinkradAppKit
+import Foundation
+import Testing
+
 @testable import ainkrad
 
 @Suite("ainkrad notify")
@@ -10,8 +11,9 @@ struct NotifyTests {
         let payload = try Notify.makePayload(
             token: "tok", kind: "build.failed", severity: "failure",
             title: "Build failed", body: "3 errors", importance: "urgent", dedupeKey: "b:main")
-        let json = try JSONSerialization.jsonObject(
-            with: JSONEncoder().encode(payload)) as? [String: Any]
+        let json =
+            try JSONSerialization.jsonObject(
+                with: JSONEncoder().encode(payload)) as? [String: Any]
         #expect(json?["kind"] as? String == "build.failed")
         #expect(json?["severity"] as? String == "failure")
         #expect(json?["source"] == nil, "the CLI cannot name a source; the host derives it")
@@ -21,17 +23,19 @@ struct NotifyTests {
     @Test("an unknown severity is a usage error, not a silent default")
     func rejectsBadSeverity() {
         #expect(throws: (any Error).self) {
-            _ = try Notify.makePayload(token: "t", kind: "test.event", severity: "catastrophic",
-                                       title: "t", body: nil, importance: nil, dedupeKey: nil)
+            _ = try Notify.makePayload(
+                token: "t", kind: "test.event", severity: "catastrophic",
+                title: "t", body: nil, importance: nil, dedupeKey: nil)
         }
     }
 
     @Test("an unknown importance is a usage error too")
     func rejectsBadImportance() {
         #expect(throws: (any Error).self) {
-            _ = try Notify.makePayload(token: "t", kind: "test.event", severity: "info",
-                                       title: "t", body: nil, importance: "screaming",
-                                       dedupeKey: nil)
+            _ = try Notify.makePayload(
+                token: "t", kind: "test.event", severity: "info",
+                title: "t", body: nil, importance: "screaming",
+                dedupeKey: nil)
         }
     }
 
@@ -40,8 +44,9 @@ struct NotifyTests {
         // The host would reject it anyway, but reporting it here tells the
         // operator what is wrong instead of leaving a silent no-op.
         #expect(throws: (any Error).self) {
-            _ = try Notify.makePayload(token: "t", kind: "Not A Kind", severity: "info",
-                                       title: "t", body: nil, importance: nil, dedupeKey: nil)
+            _ = try Notify.makePayload(
+                token: "t", kind: "Not A Kind", severity: "info",
+                title: "t", body: nil, importance: nil, dedupeKey: nil)
         }
     }
 
@@ -77,8 +82,9 @@ struct NotifyTests {
     @Test("every outcome exits 0; failures are stderr warnings only")
     func allOutcomesExitZero() {
         for outcome in SignalClientOutcome.allCases {
-            #expect(outcome.exitCode == 0,
-                    "\(outcome) must not break a CI step over a notification")
+            #expect(
+                outcome.exitCode == 0,
+                "\(outcome) must not break a CI step over a notification")
         }
     }
 

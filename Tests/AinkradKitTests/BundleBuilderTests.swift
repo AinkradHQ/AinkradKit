@@ -1,17 +1,7 @@
 import Foundation
 import Testing
-@testable import ainkrad
 
-/// Whether this machine has the toolchain `ainkrad build` requires: an
-/// Xcode install (the fixed `DEVELOPER_DIR` `BundleBuilder` targets)
-/// and `xcodegen` on `PATH`. The integration test below needs both — it
-/// must skip cleanly rather than fail on a machine that lacks either.
-private func buildToolchainAvailable() -> Bool {
-    guard Environment().find("xcodegen") != nil else { return false }
-    return FileManager.default.fileExists(
-        atPath: "/Applications/Xcode.app/Contents/Developer"
-    )
-}
+@testable import ainkrad
 
 /// End-to-end: scaffold a sample app with `TemplateScaffolder` (Task 4),
 /// then hand it to `BundleBuilder.build` and confirm it produces a real,

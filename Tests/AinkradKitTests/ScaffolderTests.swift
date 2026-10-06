@@ -1,6 +1,7 @@
+import AinkradAppKit
 import Foundation
 import Testing
-import AinkradAppKit
+
 @testable import ainkrad
 
 /// Forbidden placeholder tokens from `AinkradPluginTemplate` — none of these
@@ -12,13 +13,16 @@ private let forbiddenTokens = [
     "MyPluginEntryPoint",
     "My Plugin",
     "puzzlepiece.extension",
+    "AinkradPluginTemplate",
 ]
 
 /// Recursively collects every file under `root`.
 private func allFiles(under root: URL) -> [URL] {
-    guard let enumerator = FileManager.default.enumerator(
-        at: root, includingPropertiesForKeys: [.isRegularFileKey]
-    ) else { return [] }
+    guard
+        let enumerator = FileManager.default.enumerator(
+            at: root, includingPropertiesForKeys: [.isRegularFileKey]
+        )
+    else { return [] }
 
     var files: [URL] = []
     for case let url as URL in enumerator {
@@ -43,11 +47,11 @@ private func assertNoPlaceholderTokensRemain(under root: URL) {
     }
 }
 
-private func readInfoPlist(at root: URL) -> [String: Any] {
+private func readInfoPlist(at root: URL) throws -> [String: Any] {
     let plistURL = root.appendingPathComponent("Sources/Plugin/Info.plist")
-    let data = try! Data(contentsOf: plistURL)
-    let plist = try! PropertyListSerialization.propertyList(from: data, format: nil)
-    return plist as! [String: Any]
+    let data = try Data(contentsOf: plistURL)
+    let plist = try PropertyListSerialization.propertyList(from: data, format: nil)
+    return try #require(plist as? [String: Any])
 }
 
 private func makeTempDirectory() -> URL {
@@ -68,7 +72,7 @@ private func makeTempDirectory() -> URL {
         into: destination
     )
 
-    let plist = readInfoPlist(at: destination)
+    let plist = try readInfoPlist(at: destination)
     #expect(plist["AinkradAppID"] as? String == "myapp")
     #expect(plist["AinkradDisplayName"] as? String == "My Widget")
     #expect(plist["AinkradIconSymbol"] as? String == "star.fill")
@@ -164,7 +168,7 @@ private func makeTempDirectory() -> URL {
     #expect(appSwift.contains("struct MyAppTwo: AinkradApp"))
     #expect(!appSwift.contains("MyAppTwoTwo"))
 
-    let plist = readInfoPlist(at: destination)
+    let plist = try readInfoPlist(at: destination)
     #expect(plist["CFBundleName"] as? String == "MyAppTwo")
     #expect(plist["NSPrincipalClass"] as? String == "MyAppTwoEntryPoint")
 }
@@ -190,9 +194,63 @@ private func makeTempDirectory() -> URL {
     #expect(FileManager.default.fileExists(atPath: gitignoreURL.path))
 
     let contents = try String(contentsOf: gitignoreURL, encoding: .utf8)
-    for entry in [".build/", "build/", ".ainkrad-build/", "dist/", "*.bundle.zip"] {
+    for entry in [".build/", "build/", ".ainkrad-build/", "dist/", "*.bundle.zip", "*.xcodeproj/"] {
         #expect(contents.contains(entry), "expected .gitignore to cover \"\(entry)\"")
     }
+}
+
+/// `project.yml`'s `name:` is the generated `.xcodeproj`'s name. Left as the
+/// template's, every scaffold generated `AinkradPluginTemplate.xcodeproj`.
+@Test func scaffoldedProjectIsNamedAfterTheApp() throws {
+    let destination = makeTempDirectory()
+    defer { try? FileManager.default.removeItem(at: destination) }
+
+    try TemplateScaffolder().scaffold(
+        name: "MyWidget", id: "myapp", displayName: "My Widget",
+        icon: "star.fill", into: destination
+    )
+
+    let project = try String(contentsOf: destination.appendingPathComponent("project.yml"), encoding: .utf8)
+    #expect(project.hasPrefix("name: MyWidget\n"))
+}
+
+/// Only identity tokens change. A `"apiVersion": 1,` token once rewrote the
+/// Makefile comment that quotes the old hand-built manifest, so the comment
+/// claimed the deleted script hardcoded the current generation.
+@Test func scaffoldingLeavesTheMakefileCommentsAlone() throws {
+    let destination = makeTempDirectory()
+    defer { try? FileManager.default.removeItem(at: destination) }
+
+    try TemplateScaffolder().scaffold(
+        name: "MyWidget", id: "myapp", displayName: "My Widget",
+        icon: "star.fill", into: destination
+    )
+
+    func comments(_ url: URL) throws -> [Substring] {
+        try String(contentsOf: url, encoding: .utf8).split(separator: "\n").filter { $0.hasPrefix("#") }
+    }
+    let template = try TemplateScaffolder.embeddedTemplateURL().appendingPathComponent("Makefile")
+    let scaffolded = try comments(destination.appendingPathComponent("Makefile"))
+    #expect(!scaffolded.isEmpty)
+    #expect(scaffolded == (try comments(template)))
+}
+
+/// The scaffolded `DEV_PLUGINS` is the host's sideload directory,
+/// `<bundle-id>/Cache/DevPlugins` — not the old `Documents/DevPlugins`.
+@Test func scaffoldedMakefileSideloadsIntoTheHostCache() throws {
+    let destination = makeTempDirectory()
+    defer { try? FileManager.default.removeItem(at: destination) }
+
+    try TemplateScaffolder().scaffold(
+        name: "MyWidget", id: "myapp", displayName: "My Widget",
+        icon: "star.fill", into: destination
+    )
+
+    let makefile = try String(contentsOf: destination.appendingPathComponent("Makefile"), encoding: .utf8)
+    #expect(
+        makefile.contains(
+            "DEV_PLUGINS := $(HOME)/Library/Application Support/com.ainkrad.app/Cache/DevPlugins\n"))
+    #expect(makefile.contains("rm -rf \"$(DEV_PLUGINS)/MyWidget.bundle\""))
 }
 
 @Test func rejectsInvalidAppID() {
@@ -202,7 +260,7 @@ private func makeTempDirectory() -> URL {
     #expect(throws: (any Error).self) {
         try TemplateScaffolder().scaffold(
             name: "MyWidget",
-            id: "my app", // space is not in PluginValidation's allowed charset
+            id: "my app",  // space is not in PluginValidation's allowed charset
             displayName: "My Widget",
             icon: "star.fill",
             into: destination
@@ -224,7 +282,7 @@ private func makeTempDirectory() -> URL {
         into: destination
     )
 
-    let plist = readInfoPlist(at: destination)
+    let plist = try readInfoPlist(at: destination)
     #expect(plist["AinkradAppID"] as? String == "my-app")
     #expect(plist["AinkradDisplayName"] as? String == "咖啡 Café ☕️")
     #expect(plist["AinkradAPIVersion"] as? Int == AinkradAppKit.apiVersion)
@@ -253,13 +311,14 @@ struct ScaffoldedSDKPinTests {
         // compared to a constant tests only that someone typed the same thing
         // twice, which is the mistake this is here to catch.
         let packageURL = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // AinkradKitTests
-            .deletingLastPathComponent()   // Tests
-            .deletingLastPathComponent()   // package root
+            .deletingLastPathComponent()  // AinkradKitTests
+            .deletingLastPathComponent()  // Tests
+            .deletingLastPathComponent()  // package root
             .appendingPathComponent("Package.swift")
         let manifest = try String(contentsOf: packageURL, encoding: .utf8)
 
-        let pinned = manifest
+        let pinned =
+            manifest
             .components(separatedBy: "AinkradAppKit")
             .dropFirst()
             .compactMap { chunk -> String? in
@@ -272,8 +331,9 @@ struct ScaffoldedSDKPinTests {
 
         let actual = try #require(pinned, "could not find the AinkradAppKit pin in Package.swift")
         // A new app must not link a different SDK than the tool that made it.
-        #expect(TemplateScaffolder.sdkRevision == actual,
-                "the scaffolded pin does not match the CLI's own SDK pin")
+        #expect(
+            TemplateScaffolder.sdkRevision == actual,
+            "the scaffolded pin does not match the CLI's own SDK pin")
     }
 
     @Test("the placeholder is not itself the real revision")
@@ -290,15 +350,17 @@ struct ScaffoldedSDKPinTests {
         // silent no-op and only the hand edit kept the output right. The two
         // tests above could not see it — they compare constants, not the file.
         let templateURL = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // AinkradKitTests
-            .deletingLastPathComponent()   // Tests
-            .deletingLastPathComponent()   // package root
+            .deletingLastPathComponent()  // AinkradKitTests
+            .deletingLastPathComponent()  // Tests
+            .deletingLastPathComponent()  // package root
             .appendingPathComponent("Sources/ainkrad/Resources/Template/project.yml")
         let template = try String(contentsOf: templateURL, encoding: .utf8)
-        #expect(template.contains(TemplateScaffolder.templateSDKRevision),
-                "the template's AinkradAppKit revision must be the placeholder")
-        #expect(!template.contains(TemplateScaffolder.sdkRevision),
-                "the template must not carry the real pin — the scaffolder substitutes it")
+        #expect(
+            template.contains(TemplateScaffolder.templateSDKRevision),
+            "the template's AinkradAppKit revision must be the placeholder")
+        #expect(
+            !template.contains(TemplateScaffolder.sdkRevision),
+            "the template must not carry the real pin — the scaffolder substitutes it")
     }
 
     @Test("a scaffolded project pins the CLI's own SDK revision")
@@ -313,8 +375,9 @@ struct ScaffoldedSDKPinTests {
             icon: "star.fill", into: destination
         )
 
-        let project = try String(contentsOf: destination.appendingPathComponent("project.yml"),
-                                 encoding: .utf8)
+        let project = try String(
+            contentsOf: destination.appendingPathComponent("project.yml"),
+            encoding: .utf8)
         #expect(project.contains("revision: \(TemplateScaffolder.sdkRevision)"))
         #expect(!project.contains(TemplateScaffolder.templateSDKRevision))
     }
@@ -384,9 +447,11 @@ struct ScaffoldedSDKPinTests {
     // exec bit on the way into the bundle, in which case `TemplateScaffolder`
     // restores 0755 explicitly.
     let scriptsURL = destination.appendingPathComponent("scripts", isDirectory: true)
-    guard let enumerator = FileManager.default.enumerator(
-        at: scriptsURL, includingPropertiesForKeys: [.isRegularFileKey]
-    ) else {
+    guard
+        let enumerator = FileManager.default.enumerator(
+            at: scriptsURL, includingPropertiesForKeys: [.isRegularFileKey]
+        )
+    else {
         Issue.record("could not enumerate scaffolded scripts/")
         return
     }

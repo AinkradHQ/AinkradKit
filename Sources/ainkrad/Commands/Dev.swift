@@ -6,8 +6,6 @@ import Foundation
 /// for changes and rebuild+relaunch on each debounced batch. All
 /// orchestration logic lives in `DevSession`; this command's only jobs are
 /// locating the Dev Host and wiring `DevSession`'s real collaborators.
-///
-/// NOT registered as a root subcommand yet (Task 9's job).
 struct Dev: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "dev",
@@ -21,7 +19,7 @@ struct Dev: ParsableCommand {
         let directory = URL(fileURLWithPath: projectDir ?? ".")
 
         guard let devHostURL = Dev.locateDevHost() else {
-            print(Dev.devHostNotInstalledMessage)
+            printError(Dev.devHostNotInstalledMessage)
             throw ExitCode(1)
         }
 
@@ -55,20 +53,23 @@ struct Dev: ParsableCommand {
     /// Sub-project C is not built yet on every machine, so this is a real
     /// lookup, not a hardcoded assumption: an `AINKRAD_DEV_HOST_PATH`
     /// environment override first (for developers building it elsewhere),
-    /// then the documented default install location.
-    static func locateDevHost() -> URL? {
+    /// then the documented default install location. An override that
+    /// points at nothing is a miss, not a fall-through to the default.
+    static func locateDevHost(
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        defaultURL: URL = URL(fileURLWithPath: "/Applications/AinkradDevHost.app")
+    ) -> URL? {
         let fileManager = FileManager.default
-        if let overridePath = ProcessInfo.processInfo.environment["AINKRAD_DEV_HOST_PATH"] {
+        if let overridePath = environment["AINKRAD_DEV_HOST_PATH"] {
             let url = URL(fileURLWithPath: overridePath)
             return fileManager.fileExists(atPath: url.path) ? url : nil
         }
-        let defaultURL = URL(fileURLWithPath: "/Applications/AinkradDevHost.app")
         return fileManager.fileExists(atPath: defaultURL.path) ? defaultURL : nil
     }
 
     static let devHostNotInstalledMessage =
-        "Dev Host not installed. Build sub-project C (AinkradDevHost) and either install it " +
-        "at /Applications/AinkradDevHost.app, or point AINKRAD_DEV_HOST_PATH at its .app bundle."
+        "Dev Host not installed. Build sub-project C (AinkradDevHost) and either install it "
+        + "at /Applications/AinkradDevHost.app, or point AINKRAD_DEV_HOST_PATH at its .app bundle."
 }
 
 // MARK: - Real DevSession collaborators
@@ -99,9 +100,9 @@ private struct RealDevSessionValidator: DevSessionValidating {
 /// stdout/stderr from the developer's terminal), passing the bundle to load
 /// as `--bundle <path>`. On relaunch, the newly-spawned process replaces
 /// the previous one only after successfully starting.
-private final class DevHostProcessLauncher: DevSessionLaunching {
+final class DevHostProcessLauncher: DevSessionLaunching {
     private let devHostURL: URL
-    private var runningProcess: Process?
+    private(set) var runningProcess: Process?
 
     init(devHostURL: URL) {
         self.devHostURL = devHostURL
@@ -133,6 +134,12 @@ private final class DevHostProcessLauncher: DevSessionLaunching {
 /// one, exactly the contract `DevSessionTests`' `ManualScheduler` fake
 /// mirrors deterministically.
 private final class DispatchQueueDebounceScheduler: DevSessionScheduler {
+    /// Unsynchronised on purpose. Its only writer is `debounce`, and the only
+    /// caller of `debounce` is `DevSession`'s `onChange`, which `FileWatcher`
+    /// invokes on its one serial FSEvents delivery queue — so reads and writes
+    /// never overlap. The debounced work runs on `queue` and never touches
+    /// this property. Calling `debounce` from a second thread breaks this; add
+    /// a lock or hop onto `queue` first if that ever changes.
     private var pendingWorkItem: DispatchWorkItem?
 
     /// A dedicated serial queue, never `DispatchQueue.main`: `ainkrad dev`'s

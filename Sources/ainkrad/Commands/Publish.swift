@@ -14,8 +14,6 @@ import Foundation
 /// installer's `author == nil` grandfather clause safe: a new submission can
 /// no longer reach the catalog author-less, so a nil author on an installed
 /// entry can only mean a genuinely legacy, pre-completeness entry.
-///
-/// NOT registered as a root subcommand yet (Task 9's job).
 struct Publish: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "publish",
@@ -37,15 +35,15 @@ struct Publish: ParsableCommand {
         do {
             try Validate.check(bundleURL: bundleURL, inspector: BundleInspector())
         } catch {
-            print("Refusing to publish: \(Validate.message(for: error))")
+            printError("Refusing to publish: \(Validate.message(for: error))")
             throw ExitCode(1)
         }
 
         let storeIssues = try Validate.storeIssues(bundleURL: bundleURL, inspector: BundleInspector())
         if !storeIssues.isEmpty {
-            print("Refusing to publish:")
+            printError("Refusing to publish:")
             for issue in storeIssues {
-                print("\(issue.code): \(issue.message)")
+                printError("\(issue.code): \(issue.message)")
             }
             throw ExitCode(1)
         }
@@ -54,7 +52,9 @@ struct Publish: ParsableCommand {
         let (zip, manifest) = try publisher.package(bundle: bundleURL)
 
         if dryRun {
-            print("Dry run: packaged \(zip.lastPathComponent) and \(manifest.lastPathComponent). Skipping gh release create.")
+            print(
+                "Dry run: packaged \(zip.lastPathComponent) and \(manifest.lastPathComponent). Skipping gh release create."
+            )
             return
         }
 

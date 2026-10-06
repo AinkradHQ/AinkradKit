@@ -1,5 +1,5 @@
-import Foundation
 import AinkradAppKit
+import Foundation
 
 /// What happened when the CLI tried to post a notification.
 ///
@@ -46,10 +46,10 @@ enum SignalClientOutcome: Equatable, CaseIterable {
             return "ainkrad notify: Ainkrad is not running; the notification was not delivered."
         case .noToken:
             return "ainkrad notify: no token configured. Pair this CLI in "
-                 + "Ainkrad › Settings › Notifications, or set AINKRAD_SIGNAL_TOKEN."
+                + "Ainkrad › Settings › Notifications, or set AINKRAD_SIGNAL_TOKEN."
         case .rejected:
             return "ainkrad notify: Ainkrad refused the notification (unrecognised token, "
-                 + "invalid kind, or rate limited). Check Settings › Notifications."
+                + "invalid kind, or rate limited). Check Settings › Notifications."
         case .writeFailed:
             return "ainkrad notify: the notification could not be written to the socket."
         case .badSocketPath:

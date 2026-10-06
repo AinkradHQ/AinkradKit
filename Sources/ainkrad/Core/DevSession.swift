@@ -76,7 +76,7 @@ struct DevSession {
         changeSource: DevSessionChangeSource,
         scheduler: DevSessionScheduler,
         debounceInterval: TimeInterval = 0.3,
-        reportError: @escaping (String) -> Void = { print($0) }
+        reportError: @escaping (String) -> Void = { printError($0) }
     ) {
         self.builder = builder
         self.validator = validator
