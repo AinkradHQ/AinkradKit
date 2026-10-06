@@ -27,54 +27,6 @@ import Testing
 /// incomplete submission through; it asserts incomplete bundles never get
 /// that far.
 
-/// The exact JSON shape the host's `GitHubReleasesCatalogSource` decodes the
-/// published `ainkrad-plugin.json` asset into (mirrors `PublishTests`'
-/// private `PluginManifest`, copied from
-/// `Ainkrad/Sources/Ainkrad/Core/AppStore/CatalogModel.swift`).
-private struct PluginManifest: Codable {
-    let id: String
-    let name: String
-    let icon: String
-    let description: String
-    let apiVersion: Int
-    let sha256: String
-    let author: String?
-}
-
-/// A golden `.bundle` fixture: a real directory on disk with a
-/// `Contents/Info.plist`, written with `PropertyListSerialization` so no
-/// actual Xcode build is needed to exercise validation or packaging.
-private func makeGoldenBundle(infoDictionary: [String: Any]) throws -> URL {
-    let bundleURL = FileManager.default.temporaryDirectory
-        .appendingPathComponent("ainkrad-store-parity-tests-\(UUID().uuidString).bundle")
-    let contentsURL = bundleURL.appendingPathComponent("Contents")
-    try FileManager.default.createDirectory(at: contentsURL, withIntermediateDirectories: true)
-
-    let data = try PropertyListSerialization.data(
-        fromPropertyList: infoDictionary, format: .xml, options: 0
-    )
-    try data.write(to: contentsURL.appendingPathComponent("Info.plist"))
-
-    return bundleURL
-}
-
-/// A complete, valid Info.plist dictionary built against the CLI's own
-/// target generation (`AinkradAppKit.apiVersion`), with every key overridable
-/// so individual golden rows can knock one out.
-private func validInfoDictionary(overrides: [String: Any] = [:], removing: Set<String> = []) -> [String: Any] {
-    var dict: [String: Any] = [
-        PluginInfoKey.appID: "com.example.widget",
-        PluginInfoKey.displayName: "Example Widget",
-        PluginInfoKey.iconSymbol: "star.fill",
-        PluginInfoKey.apiVersion: AinkradAppKit.apiVersion,
-        PluginInfoKey.principalClass: "WidgetApp",
-        "CFBundleExecutable": "ExampleWidget",
-    ]
-    for (key, value) in overrides { dict[key] = value }
-    for key in removing { dict.removeValue(forKey: key) }
-    return dict
-}
-
 /// One golden bundle and the store-issue codes both paths must agree on.
 private struct GoldenRow {
     let name: String

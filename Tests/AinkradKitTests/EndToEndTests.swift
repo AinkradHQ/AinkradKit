@@ -6,29 +6,6 @@ import Testing
 
 @testable import ainkrad
 
-/// The exact host-decodable shape a published `ainkrad-plugin.json` must
-/// decode into (mirrors `PublishTests.swift`'s copy of the real host's
-/// `PluginManifest` from `Ainkrad/Sources/Ainkrad/Core/AppStore/CatalogModel.swift`).
-private struct E2EPluginManifest: Codable {
-    let id: String
-    let name: String
-    let icon: String
-    let description: String
-    let apiVersion: Int
-    let sha256: String
-}
-
-/// Whether this machine has the toolchain the pipeline requires: an
-/// Xcode install (the fixed `DEVELOPER_DIR` `BundleBuilder` targets)
-/// and `xcodegen` on `PATH`. Mirrors `BundleBuilderTests`' guard — this test
-/// must skip cleanly, not fail, on a machine that lacks either.
-private func e2eToolchainAvailable() -> Bool {
-    guard Environment().find("xcodegen") != nil else { return false }
-    return FileManager.default.fileExists(
-        atPath: "/Applications/Xcode.app/Contents/Developer"
-    )
-}
-
 /// Recursively finds the first `.bundle` under `root` — the same convention
 /// `ainkrad build` uses to place its output (`<projectDir>/.ainkrad-build/Build/Products/...`),
 /// used here only to locate the artifact `ainkrad build` already produced,
@@ -59,7 +36,7 @@ private func findBundle(under root: URL) -> URL? {
 /// cleanly (like `BundleBuilderTests`) when the toolchain is absent.
 @Test(
     "ainkrad new -> build -> validate -> publish --dry-run all exit 0 and publish a valid manifest",
-    .enabled(if: e2eToolchainAvailable(), "requires Xcode and xcodegen on this machine"),
+    .enabled(if: buildToolchainAvailable(), "requires Xcode and xcodegen on this machine"),
     .timeLimit(.minutes(15))
 )
 func endToEndHappyPath() throws {
@@ -114,7 +91,7 @@ func endToEndHappyPath() throws {
     #expect(FileManager.default.fileExists(atPath: manifest.path))
 
     let manifestData = try Data(contentsOf: manifest)
-    let decoded = try JSONDecoder().decode(E2EPluginManifest.self, from: manifestData)
+    let decoded = try JSONDecoder().decode(PluginManifest.self, from: manifestData)
 
     #expect(decoded.id == "SampleApp")
     #expect(decoded.name == "SampleApp")

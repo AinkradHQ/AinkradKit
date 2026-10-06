@@ -46,11 +46,11 @@ private func assertNoPlaceholderTokensRemain(under root: URL) {
     }
 }
 
-private func readInfoPlist(at root: URL) -> [String: Any] {
+private func readInfoPlist(at root: URL) throws -> [String: Any] {
     let plistURL = root.appendingPathComponent("Sources/Plugin/Info.plist")
-    let data = try! Data(contentsOf: plistURL)
-    let plist = try! PropertyListSerialization.propertyList(from: data, format: nil)
-    return plist as! [String: Any]
+    let data = try Data(contentsOf: plistURL)
+    let plist = try PropertyListSerialization.propertyList(from: data, format: nil)
+    return try #require(plist as? [String: Any])
 }
 
 private func makeTempDirectory() -> URL {
@@ -71,7 +71,7 @@ private func makeTempDirectory() -> URL {
         into: destination
     )
 
-    let plist = readInfoPlist(at: destination)
+    let plist = try readInfoPlist(at: destination)
     #expect(plist["AinkradAppID"] as? String == "myapp")
     #expect(plist["AinkradDisplayName"] as? String == "My Widget")
     #expect(plist["AinkradIconSymbol"] as? String == "star.fill")
@@ -167,7 +167,7 @@ private func makeTempDirectory() -> URL {
     #expect(appSwift.contains("struct MyAppTwo: AinkradApp"))
     #expect(!appSwift.contains("MyAppTwoTwo"))
 
-    let plist = readInfoPlist(at: destination)
+    let plist = try readInfoPlist(at: destination)
     #expect(plist["CFBundleName"] as? String == "MyAppTwo")
     #expect(plist["NSPrincipalClass"] as? String == "MyAppTwoEntryPoint")
 }
@@ -227,7 +227,7 @@ private func makeTempDirectory() -> URL {
         into: destination
     )
 
-    let plist = readInfoPlist(at: destination)
+    let plist = try readInfoPlist(at: destination)
     #expect(plist["AinkradAppID"] as? String == "my-app")
     #expect(plist["AinkradDisplayName"] as? String == "咖啡 Café ☕️")
     #expect(plist["AinkradAPIVersion"] as? Int == AinkradAppKit.apiVersion)
