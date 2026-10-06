@@ -26,9 +26,11 @@ struct TemplateScaffolder {
     /// can compare scaffolded output byte-for-byte against the embedded
     /// copies it came from.
     static func embeddedTemplateURL() throws -> URL {
-        guard let templateURL = Bundle.module.url(
-            forResource: TemplateScaffolder.templateResourceName, withExtension: nil
-        ) else {
+        guard
+            let templateURL = Bundle.module.url(
+                forResource: TemplateScaffolder.templateResourceName, withExtension: nil
+            )
+        else {
             throw TemplateScaffolderError(
                 description: "Embedded template resources not found in the ainkrad bundle."
             )
@@ -45,14 +47,14 @@ struct TemplateScaffolder {
     ) throws {
         guard PluginValidation.isValidAppID(id) else {
             throw TemplateScaffolderError(
-                description: "Invalid app id \"\(id)\": must be non-empty, not \".\" or \"..\", " +
-                    "and contain only letters, digits, '.', '_', or '-'."
+                description: "Invalid app id \"\(id)\": must be non-empty, not \".\" or \"..\", "
+                    + "and contain only letters, digits, '.', '_', or '-'."
             )
         }
         guard TemplateScaffolder.isValidSwiftIdentifier(name) else {
             throw TemplateScaffolderError(
-                description: "Invalid app name \"\(name)\": must be a valid Swift type " +
-                    "identifier (used as the app's struct, entry-point class, and target name)."
+                description: "Invalid app name \"\(name)\": must be a valid Swift type "
+                    + "identifier (used as the app's struct, entry-point class, and target name)."
             )
         }
 
@@ -236,9 +238,11 @@ struct TemplateScaffolder {
     /// by `scaffold` — see the comment there.
     private static func makeScriptsExecutable(root: URL, fileManager: FileManager) throws {
         let scriptsURL = root.appendingPathComponent("scripts", isDirectory: true)
-        guard let enumerator = fileManager.enumerator(
-            at: scriptsURL, includingPropertiesForKeys: [.isRegularFileKey]
-        ) else {
+        guard
+            let enumerator = fileManager.enumerator(
+                at: scriptsURL, includingPropertiesForKeys: [.isRegularFileKey]
+            )
+        else {
             return
         }
         for case let url as URL in enumerator {

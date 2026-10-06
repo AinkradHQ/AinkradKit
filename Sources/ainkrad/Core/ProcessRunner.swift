@@ -106,10 +106,13 @@ enum ProcessRunner {
         arguments: [String] = [],
         currentDirectory: URL? = nil
     ) -> String? {
-        guard let result = try? run(URL(fileURLWithPath: executablePath),
-                                    arguments: arguments,
-                                    currentDirectory: currentDirectory),
-              result.succeeded, !result.standardOutput.isEmpty else { return nil }
+        guard
+            let result = try? run(
+                URL(fileURLWithPath: executablePath),
+                arguments: arguments,
+                currentDirectory: currentDirectory),
+            result.succeeded, !result.standardOutput.isEmpty
+        else { return nil }
         return result.standardOutput
     }
 }

@@ -9,7 +9,9 @@ struct Ainkrad: AsyncParsableCommand {
         // release through v0.2.1. `scripts/release-cli.sh` now refuses to ship
         // unless this matches the tag — bump it in the release commit.
         version: "0.3.0",
-        subcommands: [Doctor.self, New.self, Build.self, Validate.self, Dev.self, Publish.self,
-                      Notify.self]
+        subcommands: [
+            Doctor.self, New.self, Build.self, Validate.self, Dev.self, Publish.self,
+            Notify.self,
+        ]
     )
 }

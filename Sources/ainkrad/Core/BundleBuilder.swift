@@ -73,8 +73,8 @@ struct BundleBuilder {
             let scheme = schemes.first
         else {
             throw BundleBuilderError(
-                description: "Could not determine a scheme from `xcodebuild -list -json` in " +
-                    "\(projectDir.path). Output was:\n\(output)"
+                description: "Could not determine a scheme from `xcodebuild -list -json` in "
+                    + "\(projectDir.path). Output was:\n\(output)"
             )
         }
         return scheme
@@ -85,12 +85,14 @@ struct BundleBuilder {
     /// `.bundle` under the build products directory.
     private static func locateBundle(under derivedDataPath: URL, scheme: String) throws -> URL {
         let productsDir = derivedDataPath.appendingPathComponent("Build/Products")
-        guard let enumerator = FileManager.default.enumerator(
-            at: productsDir, includingPropertiesForKeys: [.isDirectoryKey]
-        ) else {
+        guard
+            let enumerator = FileManager.default.enumerator(
+                at: productsDir, includingPropertiesForKeys: [.isDirectoryKey]
+            )
+        else {
             throw BundleBuilderError(
-                description: "xcodebuild reported success but no build products directory was found at " +
-                    "\(productsDir.path)."
+                description: "xcodebuild reported success but no build products directory was found at "
+                    + "\(productsDir.path)."
             )
         }
 
@@ -136,8 +138,8 @@ struct BundleBuilder {
         }
         guard result.succeeded else {
             throw BundleBuilderError(
-                description: "\(executable.lastPathComponent) \(arguments.joined(separator: " ")) " +
-                    "failed (exit \(result.exitCode)) in \(currentDirectory.path):\n\(result.standardError)"
+                description: "\(executable.lastPathComponent) \(arguments.joined(separator: " ")) "
+                    + "failed (exit \(result.exitCode)) in \(currentDirectory.path):\n\(result.standardError)"
             )
         }
         return result.standardOutput

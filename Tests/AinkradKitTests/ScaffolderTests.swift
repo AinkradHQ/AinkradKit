@@ -1,6 +1,7 @@
+import AinkradAppKit
 import Foundation
 import Testing
-import AinkradAppKit
+
 @testable import ainkrad
 
 /// Forbidden placeholder tokens from `AinkradPluginTemplate` — none of these
@@ -16,9 +17,11 @@ private let forbiddenTokens = [
 
 /// Recursively collects every file under `root`.
 private func allFiles(under root: URL) -> [URL] {
-    guard let enumerator = FileManager.default.enumerator(
-        at: root, includingPropertiesForKeys: [.isRegularFileKey]
-    ) else { return [] }
+    guard
+        let enumerator = FileManager.default.enumerator(
+            at: root, includingPropertiesForKeys: [.isRegularFileKey]
+        )
+    else { return [] }
 
     var files: [URL] = []
     for case let url as URL in enumerator {
@@ -202,7 +205,7 @@ private func makeTempDirectory() -> URL {
     #expect(throws: (any Error).self) {
         try TemplateScaffolder().scaffold(
             name: "MyWidget",
-            id: "my app", // space is not in PluginValidation's allowed charset
+            id: "my app",  // space is not in PluginValidation's allowed charset
             displayName: "My Widget",
             icon: "star.fill",
             into: destination
@@ -253,13 +256,14 @@ struct ScaffoldedSDKPinTests {
         // compared to a constant tests only that someone typed the same thing
         // twice, which is the mistake this is here to catch.
         let packageURL = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // AinkradKitTests
-            .deletingLastPathComponent()   // Tests
-            .deletingLastPathComponent()   // package root
+            .deletingLastPathComponent()  // AinkradKitTests
+            .deletingLastPathComponent()  // Tests
+            .deletingLastPathComponent()  // package root
             .appendingPathComponent("Package.swift")
         let manifest = try String(contentsOf: packageURL, encoding: .utf8)
 
-        let pinned = manifest
+        let pinned =
+            manifest
             .components(separatedBy: "AinkradAppKit")
             .dropFirst()
             .compactMap { chunk -> String? in
@@ -272,8 +276,9 @@ struct ScaffoldedSDKPinTests {
 
         let actual = try #require(pinned, "could not find the AinkradAppKit pin in Package.swift")
         // A new app must not link a different SDK than the tool that made it.
-        #expect(TemplateScaffolder.sdkRevision == actual,
-                "the scaffolded pin does not match the CLI's own SDK pin")
+        #expect(
+            TemplateScaffolder.sdkRevision == actual,
+            "the scaffolded pin does not match the CLI's own SDK pin")
     }
 
     @Test("the placeholder is not itself the real revision")
@@ -290,15 +295,17 @@ struct ScaffoldedSDKPinTests {
         // silent no-op and only the hand edit kept the output right. The two
         // tests above could not see it — they compare constants, not the file.
         let templateURL = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // AinkradKitTests
-            .deletingLastPathComponent()   // Tests
-            .deletingLastPathComponent()   // package root
+            .deletingLastPathComponent()  // AinkradKitTests
+            .deletingLastPathComponent()  // Tests
+            .deletingLastPathComponent()  // package root
             .appendingPathComponent("Sources/ainkrad/Resources/Template/project.yml")
         let template = try String(contentsOf: templateURL, encoding: .utf8)
-        #expect(template.contains(TemplateScaffolder.templateSDKRevision),
-                "the template's AinkradAppKit revision must be the placeholder")
-        #expect(!template.contains(TemplateScaffolder.sdkRevision),
-                "the template must not carry the real pin — the scaffolder substitutes it")
+        #expect(
+            template.contains(TemplateScaffolder.templateSDKRevision),
+            "the template's AinkradAppKit revision must be the placeholder")
+        #expect(
+            !template.contains(TemplateScaffolder.sdkRevision),
+            "the template must not carry the real pin — the scaffolder substitutes it")
     }
 
     @Test("a scaffolded project pins the CLI's own SDK revision")
@@ -313,8 +320,9 @@ struct ScaffoldedSDKPinTests {
             icon: "star.fill", into: destination
         )
 
-        let project = try String(contentsOf: destination.appendingPathComponent("project.yml"),
-                                 encoding: .utf8)
+        let project = try String(
+            contentsOf: destination.appendingPathComponent("project.yml"),
+            encoding: .utf8)
         #expect(project.contains("revision: \(TemplateScaffolder.sdkRevision)"))
         #expect(!project.contains(TemplateScaffolder.templateSDKRevision))
     }
@@ -384,9 +392,11 @@ struct ScaffoldedSDKPinTests {
     // exec bit on the way into the bundle, in which case `TemplateScaffolder`
     // restores 0755 explicitly.
     let scriptsURL = destination.appendingPathComponent("scripts", isDirectory: true)
-    guard let enumerator = FileManager.default.enumerator(
-        at: scriptsURL, includingPropertiesForKeys: [.isRegularFileKey]
-    ) else {
+    guard
+        let enumerator = FileManager.default.enumerator(
+            at: scriptsURL, includingPropertiesForKeys: [.isRegularFileKey]
+        )
+    else {
         Issue.record("could not enumerate scaffolded scripts/")
         return
     }

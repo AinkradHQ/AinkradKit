@@ -67,8 +67,8 @@ struct Dev: ParsableCommand {
     }
 
     static let devHostNotInstalledMessage =
-        "Dev Host not installed. Build sub-project C (AinkradDevHost) and either install it " +
-        "at /Applications/AinkradDevHost.app, or point AINKRAD_DEV_HOST_PATH at its .app bundle."
+        "Dev Host not installed. Build sub-project C (AinkradDevHost) and either install it "
+        + "at /Applications/AinkradDevHost.app, or point AINKRAD_DEV_HOST_PATH at its .app bundle."
 }
 
 // MARK: - Real DevSession collaborators

@@ -107,8 +107,8 @@ struct ReleasePublisher {
         }
         guard result.succeeded else {
             throw ReleasePublisherError(
-                description: "ditto \(bundle.path) -> \(zipURL.path) failed " +
-                    "(exit \(result.exitCode)): \(result.standardError)"
+                description: "ditto \(bundle.path) -> \(zipURL.path) failed "
+                    + "(exit \(result.exitCode)): \(result.standardError)"
             )
         }
     }

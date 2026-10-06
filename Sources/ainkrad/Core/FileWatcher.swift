@@ -44,15 +44,17 @@ final class FileWatcher: DevSessionChangeSource {
         )
 
         let pathsToWatch = [directory.path] as CFArray
-        guard let stream = FSEventStreamCreate(
-            kCFAllocatorDefault,
-            FileWatcher.eventCallback,
-            &context,
-            pathsToWatch,
-            FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
-            0.05,
-            FSEventStreamCreateFlags(kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagNoDefer)
-        ) else {
+        guard
+            let stream = FSEventStreamCreate(
+                kCFAllocatorDefault,
+                FileWatcher.eventCallback,
+                &context,
+                pathsToWatch,
+                FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
+                0.05,
+                FSEventStreamCreateFlags(kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagNoDefer)
+            )
+        else {
             throw DevSessionError(
                 description: "Could not create an FSEvents stream to watch \(directory.path) for changes."
             )
@@ -134,10 +136,10 @@ final class FileWatcher: DevSessionChangeSource {
     /// sync with `BundleBuilder` (which writes DerivedData into
     /// `.ainkrad-build`) and the conventions of the surrounding toolchain.
     private static let ignoredComponents: Set<String> = [
-        ".ainkrad-build",   // BundleBuilder's -derivedDataPath (holds the built .bundle)
-        ".build",           // SwiftPM output
-        "DerivedData",      // Xcode's default DerivedData, if ever used
-        ".git",             // version control internals
-        ".DS_Store",        // Finder metadata
+        ".ainkrad-build",  // BundleBuilder's -derivedDataPath (holds the built .bundle)
+        ".build",  // SwiftPM output
+        "DerivedData",  // Xcode's default DerivedData, if ever used
+        ".git",  // version control internals
+        ".DS_Store",  // Finder metadata
     ]
 }

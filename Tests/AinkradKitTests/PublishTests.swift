@@ -3,6 +3,7 @@ import ArgumentParser
 import CryptoKit
 import Foundation
 import Testing
+
 @testable import ainkrad
 
 // The EXACT decodable the real host's `GitHubReleasesCatalogSource` decodes
@@ -60,9 +61,10 @@ private func validInfoDictionary(overrides: [String: Any] = [:], removing: Set<S
 }
 
 @Test func packageProducesAZipAndAManifestThatDecodesIntoTheHostsShape() throws {
-    let bundleURL = try makeGoldenBundle(infoDictionary: validInfoDictionary(overrides: [
-        PluginInfoKey.author: "Jane Developer",
-    ]))
+    let bundleURL = try makeGoldenBundle(
+        infoDictionary: validInfoDictionary(overrides: [
+            PluginInfoKey.author: "Jane Developer"
+        ]))
     defer { try? FileManager.default.removeItem(at: bundleURL) }
 
     let publisher = ReleasePublisher()
@@ -109,10 +111,11 @@ private func validInfoDictionary(overrides: [String: Any] = [:], removing: Set<S
     // Must be a STORE-complete bundle (author + description), not just
     // base-valid: since publish now also enforces `StorePolicy`, a bundle
     // missing either would be refused before reaching this assertion.
-    let bundleURL = try makeGoldenBundle(infoDictionary: validInfoDictionary(overrides: [
-        PluginInfoKey.author: "Jane Developer",
-        PluginInfoKey.description: "A short description of what this app does.",
-    ]))
+    let bundleURL = try makeGoldenBundle(
+        infoDictionary: validInfoDictionary(overrides: [
+            PluginInfoKey.author: "Jane Developer",
+            PluginInfoKey.description: "A short description of what this app does.",
+        ]))
     defer { try? FileManager.default.removeItem(at: bundleURL) }
 
     let command = try Publish.parse([bundleURL.path, "v1.0.0", "--dry-run"])
@@ -129,9 +132,10 @@ private func validInfoDictionary(overrides: [String: Any] = [:], removing: Set<S
     // below, mirroring how `publishDryRunRefusesAnInvalidBundleWithoutProducingAnyAssets`
     // proves the base-validation refusal without a flaky filesystem scan
     // under parallel test execution).
-    let bundleURL = try makeGoldenBundle(infoDictionary: validInfoDictionary(overrides: [
-        PluginInfoKey.description: "A short description of what this app does.",
-    ]))
+    let bundleURL = try makeGoldenBundle(
+        infoDictionary: validInfoDictionary(overrides: [
+            PluginInfoKey.description: "A short description of what this app does."
+        ]))
     defer { try? FileManager.default.removeItem(at: bundleURL) }
 
     let issues = try Validate.storeIssues(bundleURL: bundleURL, inspector: BundleInspector())

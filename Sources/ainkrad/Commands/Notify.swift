@@ -1,6 +1,6 @@
+import AinkradAppKit
 import ArgumentParser
 import Foundation
-import AinkradAppKit
 
 /// Posts one notification into Ainkrad's Signal feed.
 ///
@@ -17,18 +17,18 @@ struct Notify: ParsableCommand {
         commandName: "notify",
         abstract: "Post a notification into Ainkrad's feed.",
         discussion: """
-        Intended for git hooks, CI steps and agent notification hooks. Exits 0 \
-        even when Ainkrad is not running, so it can never fail the command that \
-        called it; problems are reported on stderr.
+            Intended for git hooks, CI steps and agent notification hooks. Exits 0 \
+            even when Ainkrad is not running, so it can never fail the command that \
+            called it; problems are reported on stderr.
 
-        The token comes from AINKRAD_SIGNAL_TOKEN, or from the CLI's config \
-        written when you pair it in Ainkrad › Settings › Notifications.
+            The token comes from AINKRAD_SIGNAL_TOKEN, or from the CLI's config \
+            written when you pair it in Ainkrad › Settings › Notifications.
 
-        Examples:
-          ainkrad notify --kind build.failed --severity failure --title "Build failed"
-          ainkrad notify --kind agent.waiting --severity info --title "Claude needs input" \\
-            --importance urgent
-        """
+            Examples:
+              ainkrad notify --kind build.failed --severity failure --title "Build failed"
+              ainkrad notify --kind agent.waiting --severity info --title "Claude needs input" \\
+                --importance urgent
+            """
     )
 
     @Option(name: .long, help: "Event kind, e.g. build.failed. Lowercase, dots, dashes, underscores.")
@@ -46,8 +46,9 @@ struct Notify: ParsableCommand {
     @Option(name: .long, help: "background | normal | urgent. Default normal.")
     var importance: String?
 
-    @Option(name: .customLong("dedupe-key"),
-            help: "Repeats within a minute coalesce into one row with a count.")
+    @Option(
+        name: .customLong("dedupe-key"),
+        help: "Repeats within a minute coalesce into one row with a count.")
     var dedupeKey: String?
 
     /// Builds and validates the payload.
@@ -56,54 +57,65 @@ struct Notify: ParsableCommand {
     /// happens HERE, before anything is opened: the host would reject a bad
     /// kind anyway, but by then the operator has an exit 0 and no explanation,
     /// which is indistinguishable from a delivered notification.
-    static func makePayload(token: String, kind: String, severity: String, title: String,
-                            body: String?, importance: String?,
-                            dedupeKey: String?) throws -> SignalWirePayload {
+    static func makePayload(
+        token: String, kind: String, severity: String, title: String,
+        body: String?, importance: String?,
+        dedupeKey: String?
+    ) throws -> SignalWirePayload {
         guard let severity = SignalSeverity(rawValue: severity) else {
-            throw ValidationError("Unknown severity '\(severity)'. Use one of: "
-                + SignalSeverity.allCases.map(\.rawValue).joined(separator: ", ") + ".")
+            throw ValidationError(
+                "Unknown severity '\(severity)'. Use one of: "
+                    + SignalSeverity.allCases.map(\.rawValue).joined(separator: ", ") + ".")
         }
         let resolvedImportance: SignalImportance
         if let importance {
             guard let parsed = SignalImportance(rawValue: importance) else {
-                throw ValidationError("Unknown importance '\(importance)'. Use one of: "
-                    + SignalImportance.allCases.map(\.rawValue).joined(separator: ", ") + ".")
+                throw ValidationError(
+                    "Unknown importance '\(importance)'. Use one of: "
+                        + SignalImportance.allCases.map(\.rawValue).joined(separator: ", ") + ".")
             }
             resolvedImportance = parsed
         } else {
             resolvedImportance = .normal
         }
         guard SignalKind.isValid(kind) else {
-            throw ValidationError("Invalid kind '\(kind)'. Use lowercase letters, digits, "
-                + "'.', '-' and '_' — for example build.failed.")
+            throw ValidationError(
+                "Invalid kind '\(kind)'. Use lowercase letters, digits, "
+                    + "'.', '-' and '_' — for example build.failed.")
         }
         guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw ValidationError("--title must not be empty.")
         }
 
-        return SignalWirePayload(token: token, kind: kind, severity: severity, title: title,
-                                 body: body, importance: resolvedImportance,
-                                 dedupeKey: dedupeKey)
+        return SignalWirePayload(
+            token: token, kind: kind, severity: severity, title: title,
+            body: body, importance: resolvedImportance,
+            dedupeKey: dedupeKey)
     }
 
     /// Where the CLI's token comes from.
     ///
     /// The environment variable wins so a CI job can supply a token without
     /// writing a credential to disk in the workspace.
-    static func resolveToken(environment: [String: String] = ProcessInfo.processInfo.environment,
-                             configURL: URL = Notify.defaultConfigURL()) -> String? {
+    static func resolveToken(
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        configURL: URL = Notify.defaultConfigURL()
+    ) -> String? {
         if let fromEnvironment = environment["AINKRAD_SIGNAL_TOKEN"],
-           !fromEnvironment.isEmpty {
+            !fromEnvironment.isEmpty
+        {
             return fromEnvironment
         }
         guard let data = try? Data(contentsOf: configURL),
-              let config = try? JSONDecoder().decode([String: String].self, from: data),
-              let token = config["token"], !token.isEmpty else { return nil }
+            let config = try? JSONDecoder().decode([String: String].self, from: data),
+            let token = config["token"], !token.isEmpty
+        else { return nil }
         return token
     }
 
     static func defaultConfigURL() -> URL {
-        let base = FileManager.default
+        let base =
+            FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
         return base.appendingPathComponent("Ainkrad", isDirectory: true)
@@ -119,9 +131,10 @@ struct Notify: ParsableCommand {
             Self.report(.noToken)
             return
         }
-        let payload = try Self.makePayload(token: token, kind: kind, severity: severity,
-                                           title: title, body: body, importance: importance,
-                                           dedupeKey: dedupeKey)
+        let payload = try Self.makePayload(
+            token: token, kind: kind, severity: severity,
+            title: title, body: body, importance: importance,
+            dedupeKey: dedupeKey)
         Self.report(SignalClient.send(payload: payload, socket: SignalSocketPath.default()))
     }
 

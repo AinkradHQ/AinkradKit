@@ -54,7 +54,9 @@ struct Publish: ParsableCommand {
         let (zip, manifest) = try publisher.package(bundle: bundleURL)
 
         if dryRun {
-            print("Dry run: packaged \(zip.lastPathComponent) and \(manifest.lastPathComponent). Skipping gh release create.")
+            print(
+                "Dry run: packaged \(zip.lastPathComponent) and \(manifest.lastPathComponent). Skipping gh release create."
+            )
             return
         }
 

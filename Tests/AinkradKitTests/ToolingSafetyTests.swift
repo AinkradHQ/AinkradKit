@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import ainkrad
 
 /// Wave 1-D. Three tooling defects from the audit: the scaffolder silently
@@ -65,8 +66,9 @@ struct ScaffoldOverwriteTests {
     func unrelatedFilesDoNotBlock() throws {
         let destination = makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: destination) }
-        try "# notes\n".write(to: destination.appendingPathComponent("README.md"),
-                              atomically: true, encoding: .utf8)
+        try "# notes\n".write(
+            to: destination.appendingPathComponent("README.md"),
+            atomically: true, encoding: .utf8)
         try scaffold(into: destination)
         #expect(FileManager.default.fileExists(atPath: destination.appendingPathComponent("project.yml").path))
     }
@@ -110,11 +112,13 @@ struct TemplatePublishPathTests {
         let root = try scaffoldedTree()
         defer { try? FileManager.default.removeItem(at: root) }
         guard let walker = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil) else {
-            Issue.record("could not walk the scaffold"); return
+            Issue.record("could not walk the scaffold")
+            return
         }
         for case let url as URL in walker {
-            guard url.pathExtension != "plist",   // Info.plist is stamped from the SDK, correctly
-                  let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
+            guard url.pathExtension != "plist",  // Info.plist is stamped from the SDK, correctly
+                let text = try? String(contentsOf: url, encoding: .utf8)
+            else { continue }
             // The trailing COMMA matters. The template's literal is
             // `"apiVersion": 1,` and the check was written without it, which
             // was fine for one-digit generations and became a false positive
@@ -122,8 +126,9 @@ struct TemplatePublishPathTests {
             // `"apiVersion": 1`. A correctly substituted scaffold would have
             // failed this test from generation 10 onward, with a message
             // saying the opposite of what was true.
-            #expect(!text.contains("\"apiVersion\": 1,"),
-                    "hardcoded apiVersion in \(url.lastPathComponent)")
+            #expect(
+                !text.contains("\"apiVersion\": 1,"),
+                "hardcoded apiVersion in \(url.lastPathComponent)")
         }
     }
 }
@@ -181,6 +186,6 @@ struct ProcessRunnerTests {
     func outputProbeSemantics() {
         #expect(ProcessRunner.output("/bin/echo", arguments: ["hi"]) == "hi")
         #expect(ProcessRunner.output("/bin/sh", arguments: ["-c", "exit 1"]) == nil)
-        #expect(ProcessRunner.output("/bin/sh", arguments: ["-c", "true"]) == nil)   // empty output
+        #expect(ProcessRunner.output("/bin/sh", arguments: ["-c", "true"]) == nil)  // empty output
     }
 }

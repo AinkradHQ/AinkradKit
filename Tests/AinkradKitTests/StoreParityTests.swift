@@ -2,6 +2,7 @@ import AinkradAppKit
 import ArgumentParser
 import Foundation
 import Testing
+
 @testable import ainkrad
 
 /// The parity guarantee under test, now stated end-to-end: "`validate
@@ -82,43 +83,45 @@ private struct GoldenRow {
     let expectedCodes: Set<String>
 }
 
-private func goldenRows() -> [GoldenRow] { [
-    GoldenRow(
-        name: "complete",
-        overrides: [
-            PluginInfoKey.author: "Jane Developer",
-            PluginInfoKey.description: "A short description of what this app does.",
-        ],
-        removing: [],
-        expectedCodes: []
-    ),
-    GoldenRow(
-        name: "missing author",
-        overrides: [
-            PluginInfoKey.description: "A short description of what this app does.",
-        ],
-        removing: [],
-        expectedCodes: ["missing-author"]
-    ),
-    GoldenRow(
-        name: "missing description",
-        overrides: [
-            PluginInfoKey.author: "Jane Developer",
-        ],
-        removing: [],
-        expectedCodes: ["missing-description"]
-    ),
-    GoldenRow(
-        name: "unresolvable icon",
-        overrides: [
-            PluginInfoKey.author: "Jane Developer",
-            PluginInfoKey.description: "A short description of what this app does.",
-            PluginInfoKey.iconSymbol: "definitely-not-a-symbol-xyz",
-        ],
-        removing: [],
-        expectedCodes: ["missing-icon"]
-    ),
-] }
+private func goldenRows() -> [GoldenRow] {
+    [
+        GoldenRow(
+            name: "complete",
+            overrides: [
+                PluginInfoKey.author: "Jane Developer",
+                PluginInfoKey.description: "A short description of what this app does.",
+            ],
+            removing: [],
+            expectedCodes: []
+        ),
+        GoldenRow(
+            name: "missing author",
+            overrides: [
+                PluginInfoKey.description: "A short description of what this app does."
+            ],
+            removing: [],
+            expectedCodes: ["missing-author"]
+        ),
+        GoldenRow(
+            name: "missing description",
+            overrides: [
+                PluginInfoKey.author: "Jane Developer"
+            ],
+            removing: [],
+            expectedCodes: ["missing-description"]
+        ),
+        GoldenRow(
+            name: "unresolvable icon",
+            overrides: [
+                PluginInfoKey.author: "Jane Developer",
+                PluginInfoKey.description: "A short description of what this app does.",
+                PluginInfoKey.iconSymbol: "definitely-not-a-symbol-xyz",
+            ],
+            removing: [],
+            expectedCodes: ["missing-icon"]
+        ),
+    ]
+}
 
 /// Asserts the COMPLETE-bundle half of the parity guarantee: `validate
 /// --store` reports no issues, `publish` (dry-run) succeeds, and the
@@ -133,8 +136,9 @@ private func assertRowPublishesClean(_ row: GoldenRow) throws {
 
     // Path A: the CLI's own `validate --store` seam, reading the bundle's
     // Info.plist directly.
-    let codesA = Set(try Validate.storeIssues(bundleURL: bundleURL, inspector: BundleInspector())
-        .map(\.code))
+    let codesA = Set(
+        try Validate.storeIssues(bundleURL: bundleURL, inspector: BundleInspector())
+            .map(\.code))
     #expect(codesA == row.expectedCodes, "Path A (CLI validate) diverged from the expected codes for '\(row.name)'.")
 
     // Path B: `publish` itself (dry-run) must succeed — the exact gate Fix 1
@@ -163,11 +167,12 @@ private func assertRowPublishesClean(_ row: GoldenRow) throws {
         declaredSHA256: decoded.sha256,
         computedSHA256: decoded.sha256
     )
-    let codesB = Set(StorePolicy.check(
-        manifest: input,
-        minSupported: AinkradAppKit.apiVersion,
-        current: AinkradAppKit.apiVersion
-    ).map(\.code))
+    let codesB = Set(
+        StorePolicy.check(
+            manifest: input,
+            minSupported: AinkradAppKit.apiVersion,
+            current: AinkradAppKit.apiVersion
+        ).map(\.code))
     #expect(codesB.isEmpty, "Published artifact for '\(row.name)' must reconstruct into a clean StorePolicy check.")
 }
 
@@ -184,8 +189,9 @@ private func assertRowIsRefusedByPublish(_ row: GoldenRow) throws {
     )
     defer { try? FileManager.default.removeItem(at: bundleURL) }
 
-    let codesA = Set(try Validate.storeIssues(bundleURL: bundleURL, inspector: BundleInspector())
-        .map(\.code))
+    let codesA = Set(
+        try Validate.storeIssues(bundleURL: bundleURL, inspector: BundleInspector())
+            .map(\.code))
     #expect(codesA == row.expectedCodes, "Path A (CLI validate) diverged from the expected codes for '\(row.name)'.")
     #expect(!codesA.isEmpty, "'\(row.name)' is meant to be an incomplete row — expected codes must be non-empty.")
 
