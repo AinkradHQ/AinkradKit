@@ -37,15 +37,15 @@ struct Publish: ParsableCommand {
         do {
             try Validate.check(bundleURL: bundleURL, inspector: BundleInspector())
         } catch {
-            print("Refusing to publish: \(Validate.message(for: error))")
+            printError("Refusing to publish: \(Validate.message(for: error))")
             throw ExitCode(1)
         }
 
         let storeIssues = try Validate.storeIssues(bundleURL: bundleURL, inspector: BundleInspector())
         if !storeIssues.isEmpty {
-            print("Refusing to publish:")
+            printError("Refusing to publish:")
             for issue in storeIssues {
-                print("\(issue.code): \(issue.message)")
+                printError("\(issue.code): \(issue.message)")
             }
             throw ExitCode(1)
         }

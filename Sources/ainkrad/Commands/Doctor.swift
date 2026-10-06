@@ -6,6 +6,10 @@ struct DoctorRow {
     let name: String
     let passed: Bool
     let detail: String
+
+    /// The printed checklist line — plain text, so it reads the same in any
+    /// terminal and greps cleanly.
+    var line: String { "\(passed ? "ok  " : "FAIL") \(name): \(detail)" }
 }
 
 /// Environment probe — verifies the local toolchain the other `ainkrad`
@@ -57,8 +61,7 @@ struct Doctor: ParsableCommand {
     func run() throws {
         let rows = Doctor.report(env: Environment())
         for row in rows {
-            let symbol = row.passed ? "✅" : "❌"
-            print("\(symbol) \(row.name): \(row.detail)")
+            print(row.line)
         }
     }
 }

@@ -21,7 +21,7 @@ struct Dev: ParsableCommand {
         let directory = URL(fileURLWithPath: projectDir ?? ".")
 
         guard let devHostURL = Dev.locateDevHost() else {
-            print(Dev.devHostNotInstalledMessage)
+            printError(Dev.devHostNotInstalledMessage)
             throw ExitCode(1)
         }
 
