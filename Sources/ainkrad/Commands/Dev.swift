@@ -131,6 +131,12 @@ private final class DevHostProcessLauncher: DevSessionLaunching {
 /// one, exactly the contract `DevSessionTests`' `ManualScheduler` fake
 /// mirrors deterministically.
 private final class DispatchQueueDebounceScheduler: DevSessionScheduler {
+    /// Unsynchronised on purpose. Its only writer is `debounce`, and the only
+    /// caller of `debounce` is `DevSession`'s `onChange`, which `FileWatcher`
+    /// invokes on its one serial FSEvents delivery queue — so reads and writes
+    /// never overlap. The debounced work runs on `queue` and never touches
+    /// this property. Calling `debounce` from a second thread breaks this; add
+    /// a lock or hop onto `queue` first if that ever changes.
     private var pendingWorkItem: DispatchWorkItem?
 
     /// A dedicated serial queue, never `DispatchQueue.main`: `ainkrad dev`'s
