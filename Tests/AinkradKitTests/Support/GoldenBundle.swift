@@ -37,27 +37,52 @@ func validInfoDictionary(overrides: [String: Any] = [:], removing: Set<String> =
     return dict
 }
 
-// The EXACT decodable the real host decodes the published
-// `ainkrad-plugin.json` asset into (copied verbatim from
-// `Ainkrad/Sources/Ainkrad/Core/AppStore/CatalogModel.swift`'s
-// `PluginManifest`), so tests prove the asset we write decodes cleanly into
-// what the real host expects — not just into our own writer's shape.
+// Mirrors of the decodables the real host's `RemoteCatalogSource` decodes
+// `catalog.json` into (`RemoteCatalog` in `RemoteCatalogSource.swift`,
+// `CatalogEntry` + `ManifestLink` in `CatalogModel.swift`): the same required
+// keys and types, so tests prove the entry we write decodes into what the real
+// host expects — not just into our own writer's shape. `kind`/`mcp`/`skill`
+// are omitted: plugin entries never carry them.
 struct ManifestLink: Codable, Equatable {
     let title: String
     let url: URL
 }
 
-struct PluginManifest: Codable, Equatable {
-    let id: String
-    let name: String
+struct HostCatalogEntry: Decodable, Equatable {
+    let appID: String
+    let displayName: String
     let icon: String
     let description: String
+    let version: String
     let apiVersion: Int
+    let downloadURL: URL
     let sha256: String
+    let sourceRepo: String
     let author: String?
     let longDescription: String?
     let screenshots: [URL]?
     let links: [ManifestLink]?
+}
+
+struct HostRemoteCatalog: Decodable {
+    let schemaVersion: Int?
+    let apps: [HostCatalogEntry]
+}
+
+/// A golden bundle that `codesign` accepts: its executable is a copy of
+/// `/usr/bin/true`, a real Mach-O, so signing has code to sign.
+func makeSignableBundle() throws -> URL {
+    let bundleURL = try makeGoldenBundle(
+        infoDictionary: validInfoDictionary(overrides: [
+            PluginInfoKey.author: "Jane Developer",
+            PluginInfoKey.description: "A short description of what this app does.",
+            "CFBundleIdentifier": "com.example.widget",
+        ]))
+    let macOS = bundleURL.appendingPathComponent("Contents/MacOS")
+    try FileManager.default.createDirectory(at: macOS, withIntermediateDirectories: true)
+    try FileManager.default.copyItem(
+        at: URL(fileURLWithPath: "/usr/bin/true"), to: macOS.appendingPathComponent("ExampleWidget"))
+    return bundleURL
 }
 
 /// Whether this machine has the toolchain `ainkrad build` requires: an

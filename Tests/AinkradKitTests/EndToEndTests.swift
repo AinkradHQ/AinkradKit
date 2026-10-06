@@ -29,8 +29,8 @@ private func findBundle(under root: URL) -> URL? {
 /// code path `ainkrad <subcommand>` takes on the command line — rather than
 /// any reimplementation of their logic. Every step must complete without
 /// throwing (i.e. exit 0); the final step's packaged manifest must decode
-/// into the host's `PluginManifest` shape with a sha256 that independently
-/// verifies against the packaged zip.
+/// into the host's `RemoteCatalogSource` entry shape with a sha256 that independently
+/// verifies against the packaged zip, and the built bundle ad-hoc signs and verifies.
 ///
 /// Real `xcodegen generate` + `xcodebuild build`, so this is slow — skips
 /// cleanly (like `BundleBuilderTests`) when the toolchain is absent.
@@ -73,31 +73,31 @@ func endToEndHappyPath() throws {
     let validateCommand = try Validate.parse([bundleURL.path])
     try validateCommand.run()  // must not throw => exit 0
 
-    // Step 4: `ainkrad publish --dry-run` — packages assets, never shells
-    // out to `gh`.
-    let publishCommand = try Publish.parse([bundleURL.path, "v1.0.0", "--dry-run"])
+    // Step 4: `ainkrad publish --dry-run` — prints the sign + catalog plan;
+    // never signs, never shells out to `gh`, never pushes the catalog.
+    let publishCommand = try Publish.parse([bundleURL.path, "v1.0.0", "--dry-run", "--sign-identity", "-"])
     #expect(publishCommand.dryRun)
     try publishCommand.run()  // must not throw => exit 0
 
-    // `Publish.run()` intentionally only prints asset file NAMES (never
-    // full paths) in dry-run output, so — exactly as `PublishTests.swift`
-    // does to assert on packaged content — package the SAME bundle through
-    // the SAME `ReleasePublisher` the command wraps, to get the produced
-    // asset URLs back and verify the manifest it publishes really is valid.
-    let (zip, manifest) = try ReleasePublisher().package(bundle: bundleURL)
+    // Package the SAME bundle through the SAME `ReleasePublisher` the command
+    // wraps, to get the zip and catalog entry back and verify the entry
+    // decodes into the host's `RemoteCatalogSource` shape.
+    let (zip, entry) = try ReleasePublisher().package(bundle: bundleURL, tag: "v1.0.0", sourceRepo: "o/r")
     defer { try? FileManager.default.removeItem(at: zip.deletingLastPathComponent()) }
 
     #expect(FileManager.default.fileExists(atPath: zip.path))
-    #expect(FileManager.default.fileExists(atPath: manifest.path))
 
-    let manifestData = try Data(contentsOf: manifest)
-    let decoded = try JSONDecoder().decode(PluginManifest.self, from: manifestData)
+    let decoded = try JSONDecoder().decode(HostCatalogEntry.self, from: Data(try entry.json().utf8))
 
-    #expect(decoded.id == "SampleApp")
-    #expect(decoded.name == "SampleApp")
+    #expect(decoded.appID == "SampleApp")
+    #expect(decoded.displayName == "SampleApp")
     #expect(decoded.apiVersion == AinkradAppKit.apiVersion)
+    #expect(decoded.version == "v1.0.0")
 
     let zipData = try Data(contentsOf: zip)
     let expectedSHA = SHA256.hash(data: zipData).map { String(format: "%02x", $0) }.joined()
     #expect(decoded.sha256 == expectedSHA)
+
+    // A real (ad-hoc) sign of the built bundle passes the strict verify.
+    try BundleSigner(identity: "-").sign(bundleURL)
 }

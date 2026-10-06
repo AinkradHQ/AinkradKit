@@ -95,17 +95,16 @@ private func assertRowPublishesClean(_ row: GoldenRow) throws {
 
     // Path B: `publish` itself (dry-run) must succeed — the exact gate Fix 1
     // added to the real command, not a hand-rolled reconstruction.
-    let command = try Publish.parse([bundleURL.path, "v1.0.0", "--dry-run"])
+    let command = try Publish.parse([bundleURL.path, "v1.0.0", "--dry-run", "--sign-identity", "-"])
     try command.run()
 
     // And the artifact it produced decodes into a genuinely clean, installable
-    // manifest: non-empty author/description, and a fresh `StorePolicy.check`
+    // catalog entry: non-empty author/description, and a fresh `StorePolicy.check`
     // over the reconstructed installer input reports zero issues too.
-    let (zip, manifest) = try ReleasePublisher().package(bundle: bundleURL)
+    let (zip, entry) = try ReleasePublisher().package(bundle: bundleURL, tag: "v1.0.0", sourceRepo: "o/r")
     defer { try? FileManager.default.removeItem(at: zip.deletingLastPathComponent()) }
 
-    let manifestData = try Data(contentsOf: manifest)
-    let decoded = try JSONDecoder().decode(PluginManifest.self, from: manifestData)
+    let decoded = try JSONDecoder().decode(HostCatalogEntry.self, from: Data(try entry.json().utf8))
     #expect(!(decoded.author?.isEmpty ?? true), "Published manifest for '\(row.name)' must carry a non-empty author.")
     #expect(!decoded.description.isEmpty, "Published manifest for '\(row.name)' must carry a non-empty description.")
 
@@ -150,7 +149,7 @@ private func assertRowIsRefusedByPublish(_ row: GoldenRow) throws {
     // Path B: the SAME bundle, driven through the real `publish` command's
     // gate (Fix 1). It must refuse — never package, never release — because
     // the same StorePolicy issues Path A found also gate `publish`.
-    let command = try Publish.parse([bundleURL.path, "v1.0.0", "--dry-run"])
+    let command = try Publish.parse([bundleURL.path, "v1.0.0", "--dry-run", "--sign-identity", "-"])
     #expect(throws: ExitCode(1)) {
         try command.run()
     }
