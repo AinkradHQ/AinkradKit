@@ -30,7 +30,7 @@ struct ScaffoldOverwriteTests {
 
         try scaffold(into: destination)
         // Stand in for a developer's real work living where the template writes.
-        let app = destination.appendingPathComponent("Sources/Plugin/PluginApp.swift")
+        let app = destination.appendingPathComponent("Sources/MyWidgetFeature/PluginApp.swift")
         try "// months of real work\n".write(to: app, atomically: true, encoding: .utf8)
 
         #expect(throws: TemplateScaffolderError.self) { try self.scaffold(into: destination) }
@@ -50,6 +50,8 @@ struct ScaffoldOverwriteTests {
             Issue.record("second scaffold was allowed")
         } catch let error as TemplateScaffolderError {
             #expect(error.description.contains("project.yml"))
+            // Named by where the scaffold writes it, not the template's own path.
+            #expect(error.description.contains("Sources/MyWidget/Info.plist"))
             #expect(error.description.contains("Refusing to overwrite"))
         }
     }

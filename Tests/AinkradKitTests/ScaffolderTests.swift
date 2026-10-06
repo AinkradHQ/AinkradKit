@@ -10,6 +10,7 @@ private let forbiddenTokens = [
     "myplugin",
     "MyApp",
     "TemplatePlugin",
+    "TemplateFeature",
     "MyPluginEntryPoint",
     "My Plugin",
     "puzzlepiece.extension",
@@ -37,6 +38,10 @@ private func allFiles(under root: URL) -> [URL] {
 /// Asserts none of `forbiddenTokens` appear in any text file under `root`.
 private func assertNoPlaceholderTokensRemain(under root: URL) {
     for file in allFiles(under: root) {
+        // Paths carry tokens too (`Sources/TemplatePlugin/`), so check them.
+        for token in forbiddenTokens {
+            #expect(!file.path.contains(token), "found leftover placeholder token \"\(token)\" in \(file.path)")
+        }
         guard let contents = try? String(contentsOf: file, encoding: .utf8) else { continue }
         for token in forbiddenTokens {
             #expect(
@@ -47,8 +52,8 @@ private func assertNoPlaceholderTokensRemain(under root: URL) {
     }
 }
 
-private func readInfoPlist(at root: URL) throws -> [String: Any] {
-    let plistURL = root.appendingPathComponent("Sources/Plugin/Info.plist")
+private func readInfoPlist(at root: URL, name: String) throws -> [String: Any] {
+    let plistURL = root.appendingPathComponent("Sources/\(name)/Info.plist")
     let data = try Data(contentsOf: plistURL)
     let plist = try PropertyListSerialization.propertyList(from: data, format: nil)
     return try #require(plist as? [String: Any])
@@ -72,7 +77,7 @@ private func makeTempDirectory() -> URL {
         into: destination
     )
 
-    let plist = try readInfoPlist(at: destination)
+    let plist = try readInfoPlist(at: destination, name: "MyWidget")
     #expect(plist["AinkradAppID"] as? String == "myapp")
     #expect(plist["AinkradDisplayName"] as? String == "My Widget")
     #expect(plist["AinkradIconSymbol"] as? String == "star.fill")
@@ -117,7 +122,7 @@ private func makeTempDirectory() -> URL {
     )
 
     let appSwift = try String(
-        contentsOf: destination.appendingPathComponent("Sources/Plugin/PluginApp.swift"),
+        contentsOf: destination.appendingPathComponent("Sources/MyWidgetFeature/PluginApp.swift"),
         encoding: .utf8
     )
     #expect(appSwift.contains("struct MyWidget: AinkradApp"))
@@ -126,7 +131,7 @@ private func makeTempDirectory() -> URL {
     #expect(appSwift.contains("static let icon = \"star.fill\""))
 
     let entryPointSwift = try String(
-        contentsOf: destination.appendingPathComponent("Sources/Plugin/PluginEntryPoint.swift"),
+        contentsOf: destination.appendingPathComponent("Sources/MyWidget/PluginEntryPoint.swift"),
         encoding: .utf8
     )
     #expect(entryPointSwift.contains("@objc(MyWidgetEntryPoint)"))
@@ -162,13 +167,13 @@ private func makeTempDirectory() -> URL {
     )
 
     let appSwift = try String(
-        contentsOf: destination.appendingPathComponent("Sources/Plugin/PluginApp.swift"),
+        contentsOf: destination.appendingPathComponent("Sources/MyAppTwoFeature/PluginApp.swift"),
         encoding: .utf8
     )
     #expect(appSwift.contains("struct MyAppTwo: AinkradApp"))
     #expect(!appSwift.contains("MyAppTwoTwo"))
 
-    let plist = try readInfoPlist(at: destination)
+    let plist = try readInfoPlist(at: destination, name: "MyAppTwo")
     #expect(plist["CFBundleName"] as? String == "MyAppTwo")
     #expect(plist["NSPrincipalClass"] as? String == "MyAppTwoEntryPoint")
 }
@@ -282,7 +287,7 @@ private func makeTempDirectory() -> URL {
         into: destination
     )
 
-    let plist = try readInfoPlist(at: destination)
+    let plist = try readInfoPlist(at: destination, name: "CoffeeApp")
     #expect(plist["AinkradAppID"] as? String == "my-app")
     #expect(plist["AinkradDisplayName"] as? String == "咖啡 Café ☕️")
     #expect(plist["AinkradAPIVersion"] as? Int == AinkradAppKit.apiVersion)
@@ -469,7 +474,7 @@ struct ScaffoldedSDKPinTests {
             "\(url.lastPathComponent) is not executable (mode 0\(String(permissions, radix: 8)))"
         )
     }
-    #expect(scriptCount == 7)
+    #expect(scriptCount == 8)
 
     // A fresh scaffold must pass the lint gate: `git init` + stage (so the
     // tracked-only `--check` sees the files) + `--check` exits 0.

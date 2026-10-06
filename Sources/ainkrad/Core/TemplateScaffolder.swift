@@ -73,7 +73,11 @@ struct TemplateScaffolder {
         // Only files the template would actually write are checked: an empty
         // directory, or one holding unrelated files (a README, a .git), is
         // still a legitimate target.
+        let replacements = TemplateScaffolder.substitutions(
+            name: name, id: id, displayName: displayName, icon: icon
+        )
         let existing = try TemplateScaffolder.templateRelativePaths(under: templateURL, fileManager: fileManager)
+            .map { Self.applySubstitutions(to: $0, replacements: replacements) }
             .filter { fileManager.fileExists(atPath: destination.appendingPathComponent($0).path) }
         guard existing.isEmpty else {
             throw TemplateScaffolderError(
@@ -84,10 +88,6 @@ struct TemplateScaffolder {
         }
 
         try fileManager.createDirectory(at: destination, withIntermediateDirectories: true)
-
-        let replacements = TemplateScaffolder.substitutions(
-            name: name, id: id, displayName: displayName, icon: icon
-        )
 
         try TemplateScaffolder.copyAndSubstitute(
             from: templateURL, to: destination, replacements: replacements, fileManager: fileManager
@@ -126,8 +126,10 @@ struct TemplateScaffolder {
     /// Sequential passes would re-scan and corrupt text a prior pass just
     /// inserted; a single scan that only ever advances past *source* text
     /// cannot.
-    /// The placeholder revision written in the template's `project.yml`.
-    /// Never resolved by SwiftPM — it exists only to be replaced.
+    /// The placeholder revision `scripts/sync-template.sh` writes over the
+    /// standalone template's real pin in the embedded `project.yml` (the
+    /// script repeats this literal). Never resolved by SwiftPM — it exists
+    /// only to be replaced.
     static let templateSDKRevision = "60036ad9abe5d0ca4e84109bcc78a51f7b8578f0"
 
     /// The SDK revision a freshly scaffolded app pins.
@@ -166,6 +168,7 @@ struct TemplateScaffolder {
             (token: "puzzlepiece.extension", replacement: icon),
             (token: "MyPluginEntryPoint", replacement: "\(name)EntryPoint"),
             (token: "TemplatePlugin", replacement: name),
+            (token: "TemplateFeature", replacement: "\(name)Feature"),
             (token: "My Plugin", replacement: displayName),
             (token: "myplugin", replacement: id),
             (token: "MyApp", replacement: name),
@@ -221,7 +224,10 @@ struct TemplateScaffolder {
             at: source, includingPropertiesForKeys: [.isDirectoryKey]
         )
         for item in items {
-            let target = destination.appendingPathComponent(item.lastPathComponent)
+            // Names carry tokens too (`Sources/TemplatePlugin`,
+            // `Tests/TemplateFeatureTests`): project.yml points at the renamed paths.
+            let target = destination.appendingPathComponent(
+                applySubstitutions(to: item.lastPathComponent, replacements: replacements))
             let isDirectory = (try? item.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
 
             if isDirectory {
