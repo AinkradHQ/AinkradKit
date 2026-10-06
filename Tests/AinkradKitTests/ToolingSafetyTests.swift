@@ -126,8 +126,15 @@ struct TemplatePublishPathTests {
             // `"apiVersion": 1`. A correctly substituted scaffold would have
             // failed this test from generation 10 onward, with a message
             // saying the opposite of what was true.
+            //
+            // Comment lines are skipped: the Makefile's comment quotes the
+            // deleted script's literal to explain why it went.
+            let code = text.split(separator: "\n").filter {
+                let line = $0.drop { $0 == " " || $0 == "\t" }
+                return !line.hasPrefix("#") && !line.hasPrefix("//")
+            }
             #expect(
-                !text.contains("\"apiVersion\": 1,"),
+                !code.contains { $0.contains("\"apiVersion\": 1,") },
                 "hardcoded apiVersion in \(url.lastPathComponent)")
         }
     }

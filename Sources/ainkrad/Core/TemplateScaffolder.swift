@@ -145,7 +145,9 @@ struct TemplateScaffolder {
                 token: "<key>AinkradAPIVersion</key><integer>1</integer>",
                 replacement: "<key>AinkradAPIVersion</key><integer>\(AinkradAppKit.apiVersion)</integer>"
             ),
-            (token: "\"apiVersion\": 1,", replacement: "\"apiVersion\": \(AinkradAppKit.apiVersion),"),
+            // The generated .xcodeproj takes its name from this line. Matched
+            // with its key so the bare word is free to appear in comments.
+            (token: "name: AinkradPluginTemplate", replacement: "name: \(name)"),
             // The SDK revision the scaffolded project PINS.
             //
             // Substituted rather than left as the template's literal, because

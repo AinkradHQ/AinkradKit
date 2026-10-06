@@ -13,6 +13,7 @@ private let forbiddenTokens = [
     "MyPluginEntryPoint",
     "My Plugin",
     "puzzlepiece.extension",
+    "AinkradPluginTemplate",
 ]
 
 /// Recursively collects every file under `root`.
@@ -193,9 +194,45 @@ private func makeTempDirectory() -> URL {
     #expect(FileManager.default.fileExists(atPath: gitignoreURL.path))
 
     let contents = try String(contentsOf: gitignoreURL, encoding: .utf8)
-    for entry in [".build/", "build/", ".ainkrad-build/", "dist/", "*.bundle.zip"] {
+    for entry in [".build/", "build/", ".ainkrad-build/", "dist/", "*.bundle.zip", "*.xcodeproj/"] {
         #expect(contents.contains(entry), "expected .gitignore to cover \"\(entry)\"")
     }
+}
+
+/// `project.yml`'s `name:` is the generated `.xcodeproj`'s name. Left as the
+/// template's, every scaffold generated `AinkradPluginTemplate.xcodeproj`.
+@Test func scaffoldedProjectIsNamedAfterTheApp() throws {
+    let destination = makeTempDirectory()
+    defer { try? FileManager.default.removeItem(at: destination) }
+
+    try TemplateScaffolder().scaffold(
+        name: "MyWidget", id: "myapp", displayName: "My Widget",
+        icon: "star.fill", into: destination
+    )
+
+    let project = try String(contentsOf: destination.appendingPathComponent("project.yml"), encoding: .utf8)
+    #expect(project.hasPrefix("name: MyWidget\n"))
+}
+
+/// Only identity tokens change. A `"apiVersion": 1,` token once rewrote the
+/// Makefile comment that quotes the old hand-built manifest, so the comment
+/// claimed the deleted script hardcoded the current generation.
+@Test func scaffoldingLeavesTheMakefileCommentsAlone() throws {
+    let destination = makeTempDirectory()
+    defer { try? FileManager.default.removeItem(at: destination) }
+
+    try TemplateScaffolder().scaffold(
+        name: "MyWidget", id: "myapp", displayName: "My Widget",
+        icon: "star.fill", into: destination
+    )
+
+    func comments(_ url: URL) throws -> [Substring] {
+        try String(contentsOf: url, encoding: .utf8).split(separator: "\n").filter { $0.hasPrefix("#") }
+    }
+    let template = try TemplateScaffolder.embeddedTemplateURL().appendingPathComponent("Makefile")
+    let scaffolded = try comments(destination.appendingPathComponent("Makefile"))
+    #expect(!scaffolded.isEmpty)
+    #expect(scaffolded == (try comments(template)))
 }
 
 @Test func rejectsInvalidAppID() {

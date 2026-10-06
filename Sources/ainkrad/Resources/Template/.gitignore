@@ -4,3 +4,4 @@ build/
 dist/
 *.bundle.zip
 .DS_Store
+*.xcodeproj/
