@@ -1,10 +1,11 @@
 import ArgumentParser
 import Foundation
 
-/// `ainkrad publish` — packages a built `.bundle` into the catalog format
-/// the real host's `GitHubReleasesCatalogSource` consumes
-/// (`<appID>.bundle.zip` + `ainkrad-plugin.json`) and creates the GitHub
-/// Release carrying them.
+/// `ainkrad publish` — signs a built `.bundle` (hardened runtime, then
+/// `codesign --verify --strict`), packages it as `<appID>.bundle.zip`, creates
+/// the GitHub Release carrying it, and lists it in AinkradCatalog in the
+/// `RemoteCatalogSource` format (decisions 19, 20). `--dry-run` prints the sign
+/// plan and the catalog entry and touches neither the bundle nor the network.
 ///
 /// Refuses to package or release a bundle that fails the SAME base
 /// validation `ainkrad validate` runs (`Validate.check`), OR the store
@@ -17,7 +18,7 @@ import Foundation
 struct Publish: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "publish",
-        abstract: "Package a built .bundle and create its GitHub Release."
+        abstract: "Sign a built .bundle, release it on GitHub and list it in AinkradCatalog."
     )
 
     @Argument(help: "Path to the built .bundle to publish.")
@@ -26,8 +27,14 @@ struct Publish: ParsableCommand {
     @Argument(help: "The release tag (e.g. v1.0.0).")
     var tag: String
 
-    @Flag(help: "Package the release assets but skip creating the GitHub Release (no network).")
+    @Flag(help: "Print the sign plan and catalog entry; sign nothing, release nothing, push nothing.")
     var dryRun = false
+
+    @Option(help: "codesign identity (overrides $SIGN_IDENTITY); '-' signs ad-hoc for local testing only.")
+    var signIdentity: String?
+
+    @Option(help: "The plugin's GitHub repo, owner/repo (default: `gh repo view` of the current directory).")
+    var sourceRepo: String?
 
     func run() throws {
         let bundleURL = URL(fileURLWithPath: bundlePath)
@@ -48,17 +55,47 @@ struct Publish: ParsableCommand {
             throw ExitCode(1)
         }
 
-        let publisher = ReleasePublisher()
-        let (zip, manifest) = try publisher.package(bundle: bundleURL)
+        let signer: BundleSigner
+        do {
+            signer = BundleSigner(
+                identity: try BundleSigner.resolveIdentity(
+                    flag: signIdentity, environment: ProcessInfo.processInfo.environment))
+        } catch {
+            printError("Refusing to publish: \(error)")
+            throw ExitCode(1)
+        }
 
         if dryRun {
-            print(
-                "Dry run: packaged \(zip.lastPathComponent) and \(manifest.lastPathComponent). Skipping gh release create."
-            )
+            let repo = sourceRepo ?? "<owner>/<repo>"
+            let (zip, entry) = try ReleasePublisher().package(bundle: bundleURL, tag: tag, sourceRepo: repo)
+            print(try Publish.dryRunPlan(signer: signer, bundle: bundleURL, zip: zip, entry: entry))
             return
         }
 
-        try publisher.release(tag: tag, assets: [manifest, zip])
-        print("Released \(tag): \(zip.lastPathComponent), \(manifest.lastPathComponent)")
+        try signer.sign(bundleURL)
+        let repo = try sourceRepo ?? CatalogPublisher.currentSourceRepo()
+        let (zip, entry) = try ReleasePublisher().package(bundle: bundleURL, tag: tag, sourceRepo: repo)
+        try ReleasePublisher().release(tag: tag, target: try CatalogPublisher.headCommit(), assets: [zip])
+        print("Released \(tag): \(zip.lastPathComponent) (sha256 \(entry.sha256))")
+        try CatalogPublisher().push(entry)
+    }
+
+    /// What a real run would do, step by step, with the exact `codesign`
+    /// arguments and the catalog entry it would push. The dry-run zip is of the
+    /// still-unsigned bundle, so its `sha256` changes once the bundle is signed.
+    static func dryRunPlan(signer: BundleSigner, bundle: URL, zip: URL, entry: CatalogEntryRecord) throws -> String {
+        let sign = signer.commands(for: bundle).map { "  codesign " + $0.map(quoted).joined(separator: " ") }
+        return (["Dry run — nothing is signed, released or pushed.", "Sign plan (identity: \(signer.identity)):"]
+            + sign
+            + [
+                "Package: \(zip.lastPathComponent) (dry-run zip of the unsigned bundle)",
+                "Release: gh release create \(entry.version) --target <HEAD commit> \(zip.lastPathComponent)",
+                "Catalog: upsert into \(CatalogPublisher.catalogRepo) catalog.json (RemoteCatalogSource entry):",
+                try entry.json(),
+            ]).joined(separator: "\n")
+    }
+
+    private static func quoted(_ argument: String) -> String {
+        argument.contains(" ") ? "\"\(argument)\"" : argument
     }
 }

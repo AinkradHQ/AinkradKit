@@ -6,35 +6,39 @@ import Testing
 
 @testable import ainkrad
 
-@Test func packageProducesAZipAndAManifestThatDecodesIntoTheHostsShape() throws {
+@Test func packageProducesAZipAndACatalogEntryThatDecodesIntoTheHostsShape() throws {
     let bundleURL = try makeGoldenBundle(
         infoDictionary: validInfoDictionary(overrides: [
             PluginInfoKey.author: "Jane Developer"
         ]))
     defer { try? FileManager.default.removeItem(at: bundleURL) }
 
-    let publisher = ReleasePublisher()
-    let (zip, manifest) = try publisher.package(bundle: bundleURL)
-    defer {
-        try? FileManager.default.removeItem(at: zip.deletingLastPathComponent())
-    }
+    let (zip, entry) = try ReleasePublisher().package(
+        bundle: bundleURL, tag: "v1.2.3", sourceRepo: "AinkradHQ/AinkradWidget")
+    defer { try? FileManager.default.removeItem(at: zip.deletingLastPathComponent()) }
 
     #expect(zip.lastPathComponent == "com.example.widget.bundle.zip")
-    #expect(manifest.lastPathComponent == "ainkrad-plugin.json")
     #expect(FileManager.default.fileExists(atPath: zip.path))
-    #expect(FileManager.default.fileExists(atPath: manifest.path))
+    // The old `GitHubReleasesCatalogSource` asset is gone (decision 20).
+    #expect(
+        !FileManager.default.fileExists(
+            atPath: zip.deletingLastPathComponent().appendingPathComponent("ainkrad-plugin.json").path))
 
-    let manifestData = try Data(contentsOf: manifest)
-    let decoded = try JSONDecoder().decode(PluginManifest.self, from: manifestData)
+    let decoded = try JSONDecoder().decode(HostCatalogEntry.self, from: Data(try entry.json().utf8))
 
-    #expect(decoded.id == "com.example.widget")
-    #expect(decoded.name == "Example Widget")
+    #expect(decoded.appID == "com.example.widget")
+    #expect(decoded.displayName == "Example Widget")
     #expect(decoded.icon == "star.fill")
     #expect(decoded.description == "")
+    #expect(decoded.version == "v1.2.3")
     #expect(decoded.apiVersion == AinkradAppKit.apiVersion)
+    #expect(decoded.sourceRepo == "AinkradHQ/AinkradWidget")
+    #expect(
+        decoded.downloadURL.absoluteString
+            == "https://github.com/AinkradHQ/AinkradWidget/releases/download/v1.2.3/com.example.widget.bundle.zip")
     #expect(decoded.author == "Jane Developer")
 
-    // The manifest's sha256 must match an INDEPENDENTLY computed SHA-256 of
+    // The entry's sha256 must match an INDEPENDENTLY computed SHA-256 of
     // the produced zip, not just whatever the writer happened to compute.
     let zipData = try Data(contentsOf: zip)
     let expectedSHA = SHA256.hash(data: zipData).map { String(format: "%02x", $0) }.joined()
@@ -47,7 +51,7 @@ import Testing
     )
     defer { try? FileManager.default.removeItem(at: bundleURL) }
 
-    let command = try Publish.parse([bundleURL.path, "v1.0.0", "--dry-run"])
+    let command = try Publish.parse([bundleURL.path, "v1.0.0", "--dry-run", "--sign-identity", "-"])
     #expect(throws: ExitCode(1)) {
         try command.run()
     }
@@ -64,7 +68,7 @@ import Testing
         ]))
     defer { try? FileManager.default.removeItem(at: bundleURL) }
 
-    let command = try Publish.parse([bundleURL.path, "v1.0.0", "--dry-run"])
+    let command = try Publish.parse([bundleURL.path, "v1.0.0", "--dry-run", "--sign-identity", "-"])
     // Must not throw: dry-run packages but never shells out to `gh`, so
     // this must succeed fully offline.
     try command.run()
@@ -87,7 +91,7 @@ import Testing
     let issues = try Validate.storeIssues(bundleURL: bundleURL, inspector: BundleInspector())
     #expect(issues.map(\.code) == ["missing-author"])
 
-    let command = try Publish.parse([bundleURL.path, "v1.0.0", "--dry-run"])
+    let command = try Publish.parse([bundleURL.path, "v1.0.0", "--dry-run", "--sign-identity", "-"])
     #expect(throws: ExitCode(1)) {
         try command.run()
     }
@@ -122,6 +126,18 @@ struct ReleaseTests {
 
         let args = try String(contentsOf: log, encoding: .utf8)
         #expect(args == "release create v1.2.3 /a/ainkrad-plugin.json /a/x.bundle.zip\n")
+    }
+
+    @Test("pins the tag to the built commit with --target")
+    func releasePinsTarget() throws {
+        let (env, log, dir) = try fakeGH(exitCode: 0)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        try ReleasePublisher().release(
+            tag: "v1", target: "abc123", assets: [URL(fileURLWithPath: "/a/x.bundle.zip")], environment: env)
+
+        let args = try String(contentsOf: log, encoding: .utf8)
+        #expect(args == "release create v1 --target abc123 /a/x.bundle.zip\n")
     }
 
     @Test("a failing gh throws with its exit code and stderr")
