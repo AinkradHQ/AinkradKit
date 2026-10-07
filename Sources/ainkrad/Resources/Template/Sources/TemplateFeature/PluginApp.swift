@@ -3,13 +3,30 @@ import SwiftUI
 
 /// Your app. Rename `MyApp`, the id, name, and icon. Read theme via
 /// `host.theme.tokens` and persist via `host.documents` — never host internals.
-public struct MyApp: AinkradApp {
+public struct MyApp: AinkradApp, AinkradAppTeardown {
     public static let id = "myplugin"
     public static let displayName = "My Plugin"
     public static let icon = "puzzlepiece.extension"
 
+    /// One store per host-minted instance, so the settings page and every open
+    /// window of that instance observe the same value, and `teardown` can drop it.
+    private static let stores = PluginInstanceStorage<SettingsStore>()
+
+    /// The instance a host stands for. A host that does not identify itself
+    /// (see `PluginInstanceIdentity`) gets one id minted per process.
+    private static let fallbackInstance = PluginInstanceID()
+
+    private static func store(host: HostServices) -> SettingsStore {
+        let instance = (host as? PluginInstanceIdentity)?.instanceID ?? fallbackInstance
+        return stores.value(for: instance) { SettingsStore(documents: host.documents) }
+    }
+
+    public static func teardown(instance: PluginInstanceID) {
+        stores.remove(instance)
+    }
+
     public static func makeRootView(host: HostServices) -> AnyView {
-        AnyView(RootView(settings: TemplateSettings.shared(host: host), theme: host.theme))
+        AnyView(RootView(store: store(host: host), theme: host.theme))
     }
 
     public static func makeSettingsView(host: HostServices) -> AnyView {
@@ -25,7 +42,7 @@ public struct MyApp: AinkradApp {
     public static func settingsCatalog(host: HostServices) -> SettingsPage? {
         let root = SettingsPath(["app", id])
         let general = root.appending("general")
-        let settings = TemplateSettings.shared(host: host)
+        let settings = store(host: host)
 
         return SettingsPage(
             path: root, title: displayName, icon: icon,
