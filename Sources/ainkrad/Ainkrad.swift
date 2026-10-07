@@ -7,7 +7,7 @@ struct Ainkrad: AsyncParsableCommand {
         // A literal, not stamped at build time, so it said 0.1.0 in every
         // release through v0.2.1. `scripts/release-cli.sh` now refuses to ship
         // unless this matches the tag — bump it in the release commit.
-        version: "0.3.0",
+        version: "0.4.0",
         subcommands: [
             Doctor.self, New.self, Build.self, Validate.self, Dev.self, Publish.self,
             Notify.self,
