@@ -2,15 +2,15 @@ import AinkradAppKit
 import SwiftUI
 
 /// The app's window. Built from kit components, so it follows the host's skin
-/// and typography; it reads `settings`, so the "Show greeting" toggle on the
+/// and typography; it reads `store`, so the "Show greeting" toggle on the
 /// settings page shows and hides the greeting live.
 struct RootView: View {
-    let settings: TemplateSettings
+    let store: SettingsStore
     let theme: HostTheme
 
     var body: some View {
         Group {
-            if settings.showGreeting {
+            if store.showGreeting {
                 AinkradEmptyState(
                     icon: MyApp.icon,
                     title: "Hello from \(MyApp.displayName)",
