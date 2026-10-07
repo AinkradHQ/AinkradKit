@@ -2,6 +2,7 @@ import AinkradAppKit
 import ArgumentParser
 import Foundation
 import Testing
+
 @testable import ainkrad
 
 /// The parity guarantee under test, now stated end-to-end: "`validate
@@ -26,54 +27,6 @@ import Testing
 /// incomplete submission through; it asserts incomplete bundles never get
 /// that far.
 
-/// The exact JSON shape the host's `GitHubReleasesCatalogSource` decodes the
-/// published `ainkrad-plugin.json` asset into (mirrors `PublishTests`'
-/// private `PluginManifest`, copied from
-/// `Ainkrad/Sources/Ainkrad/Core/AppStore/CatalogModel.swift`).
-private struct PluginManifest: Codable {
-    let id: String
-    let name: String
-    let icon: String
-    let description: String
-    let apiVersion: Int
-    let sha256: String
-    let author: String?
-}
-
-/// A golden `.bundle` fixture: a real directory on disk with a
-/// `Contents/Info.plist`, written with `PropertyListSerialization` so no
-/// actual Xcode build is needed to exercise validation or packaging.
-private func makeGoldenBundle(infoDictionary: [String: Any]) throws -> URL {
-    let bundleURL = FileManager.default.temporaryDirectory
-        .appendingPathComponent("ainkrad-store-parity-tests-\(UUID().uuidString).bundle")
-    let contentsURL = bundleURL.appendingPathComponent("Contents")
-    try FileManager.default.createDirectory(at: contentsURL, withIntermediateDirectories: true)
-
-    let data = try PropertyListSerialization.data(
-        fromPropertyList: infoDictionary, format: .xml, options: 0
-    )
-    try data.write(to: contentsURL.appendingPathComponent("Info.plist"))
-
-    return bundleURL
-}
-
-/// A complete, valid Info.plist dictionary built against the CLI's own
-/// target generation (`AinkradAppKit.apiVersion`), with every key overridable
-/// so individual golden rows can knock one out.
-private func validInfoDictionary(overrides: [String: Any] = [:], removing: Set<String> = []) -> [String: Any] {
-    var dict: [String: Any] = [
-        PluginInfoKey.appID: "com.example.widget",
-        PluginInfoKey.displayName: "Example Widget",
-        PluginInfoKey.iconSymbol: "star.fill",
-        PluginInfoKey.apiVersion: AinkradAppKit.apiVersion,
-        PluginInfoKey.principalClass: "WidgetApp",
-        "CFBundleExecutable": "ExampleWidget",
-    ]
-    for (key, value) in overrides { dict[key] = value }
-    for key in removing { dict.removeValue(forKey: key) }
-    return dict
-}
-
 /// One golden bundle and the store-issue codes both paths must agree on.
 private struct GoldenRow {
     let name: String
@@ -82,43 +35,45 @@ private struct GoldenRow {
     let expectedCodes: Set<String>
 }
 
-private func goldenRows() -> [GoldenRow] { [
-    GoldenRow(
-        name: "complete",
-        overrides: [
-            PluginInfoKey.author: "Jane Developer",
-            PluginInfoKey.description: "A short description of what this app does.",
-        ],
-        removing: [],
-        expectedCodes: []
-    ),
-    GoldenRow(
-        name: "missing author",
-        overrides: [
-            PluginInfoKey.description: "A short description of what this app does.",
-        ],
-        removing: [],
-        expectedCodes: ["missing-author"]
-    ),
-    GoldenRow(
-        name: "missing description",
-        overrides: [
-            PluginInfoKey.author: "Jane Developer",
-        ],
-        removing: [],
-        expectedCodes: ["missing-description"]
-    ),
-    GoldenRow(
-        name: "unresolvable icon",
-        overrides: [
-            PluginInfoKey.author: "Jane Developer",
-            PluginInfoKey.description: "A short description of what this app does.",
-            PluginInfoKey.iconSymbol: "definitely-not-a-symbol-xyz",
-        ],
-        removing: [],
-        expectedCodes: ["missing-icon"]
-    ),
-] }
+private func goldenRows() -> [GoldenRow] {
+    [
+        GoldenRow(
+            name: "complete",
+            overrides: [
+                PluginInfoKey.author: "Jane Developer",
+                PluginInfoKey.description: "A short description of what this app does.",
+            ],
+            removing: [],
+            expectedCodes: []
+        ),
+        GoldenRow(
+            name: "missing author",
+            overrides: [
+                PluginInfoKey.description: "A short description of what this app does."
+            ],
+            removing: [],
+            expectedCodes: ["missing-author"]
+        ),
+        GoldenRow(
+            name: "missing description",
+            overrides: [
+                PluginInfoKey.author: "Jane Developer"
+            ],
+            removing: [],
+            expectedCodes: ["missing-description"]
+        ),
+        GoldenRow(
+            name: "unresolvable icon",
+            overrides: [
+                PluginInfoKey.author: "Jane Developer",
+                PluginInfoKey.description: "A short description of what this app does.",
+                PluginInfoKey.iconSymbol: "definitely-not-a-symbol-xyz",
+            ],
+            removing: [],
+            expectedCodes: ["missing-icon"]
+        ),
+    ]
+}
 
 /// Asserts the COMPLETE-bundle half of the parity guarantee: `validate
 /// --store` reports no issues, `publish` (dry-run) succeeds, and the
@@ -133,23 +88,23 @@ private func assertRowPublishesClean(_ row: GoldenRow) throws {
 
     // Path A: the CLI's own `validate --store` seam, reading the bundle's
     // Info.plist directly.
-    let codesA = Set(try Validate.storeIssues(bundleURL: bundleURL, inspector: BundleInspector())
-        .map(\.code))
+    let codesA = Set(
+        try Validate.storeIssues(bundleURL: bundleURL, inspector: BundleInspector())
+            .map(\.code))
     #expect(codesA == row.expectedCodes, "Path A (CLI validate) diverged from the expected codes for '\(row.name)'.")
 
     // Path B: `publish` itself (dry-run) must succeed — the exact gate Fix 1
     // added to the real command, not a hand-rolled reconstruction.
-    let command = try Publish.parse([bundleURL.path, "v1.0.0", "--dry-run"])
+    let command = try Publish.parse([bundleURL.path, "v1.0.0", "--dry-run", "--sign-identity", "-"])
     try command.run()
 
     // And the artifact it produced decodes into a genuinely clean, installable
-    // manifest: non-empty author/description, and a fresh `StorePolicy.check`
+    // catalog entry: non-empty author/description, and a fresh `StorePolicy.check`
     // over the reconstructed installer input reports zero issues too.
-    let (zip, manifest) = try ReleasePublisher().package(bundle: bundleURL)
+    let (zip, entry) = try ReleasePublisher().package(bundle: bundleURL, tag: "v1.0.0", sourceRepo: "o/r")
     defer { try? FileManager.default.removeItem(at: zip.deletingLastPathComponent()) }
 
-    let manifestData = try Data(contentsOf: manifest)
-    let decoded = try JSONDecoder().decode(PluginManifest.self, from: manifestData)
+    let decoded = try JSONDecoder().decode(HostCatalogEntry.self, from: Data(try entry.json().utf8))
     #expect(!(decoded.author?.isEmpty ?? true), "Published manifest for '\(row.name)' must carry a non-empty author.")
     #expect(!decoded.description.isEmpty, "Published manifest for '\(row.name)' must carry a non-empty description.")
 
@@ -163,11 +118,12 @@ private func assertRowPublishesClean(_ row: GoldenRow) throws {
         declaredSHA256: decoded.sha256,
         computedSHA256: decoded.sha256
     )
-    let codesB = Set(StorePolicy.check(
-        manifest: input,
-        minSupported: AinkradAppKit.apiVersion,
-        current: AinkradAppKit.apiVersion
-    ).map(\.code))
+    let codesB = Set(
+        StorePolicy.check(
+            manifest: input,
+            minSupported: AinkradAppKit.apiVersion,
+            current: AinkradAppKit.apiVersion
+        ).map(\.code))
     #expect(codesB.isEmpty, "Published artifact for '\(row.name)' must reconstruct into a clean StorePolicy check.")
 }
 
@@ -184,15 +140,16 @@ private func assertRowIsRefusedByPublish(_ row: GoldenRow) throws {
     )
     defer { try? FileManager.default.removeItem(at: bundleURL) }
 
-    let codesA = Set(try Validate.storeIssues(bundleURL: bundleURL, inspector: BundleInspector())
-        .map(\.code))
+    let codesA = Set(
+        try Validate.storeIssues(bundleURL: bundleURL, inspector: BundleInspector())
+            .map(\.code))
     #expect(codesA == row.expectedCodes, "Path A (CLI validate) diverged from the expected codes for '\(row.name)'.")
     #expect(!codesA.isEmpty, "'\(row.name)' is meant to be an incomplete row — expected codes must be non-empty.")
 
     // Path B: the SAME bundle, driven through the real `publish` command's
     // gate (Fix 1). It must refuse — never package, never release — because
     // the same StorePolicy issues Path A found also gate `publish`.
-    let command = try Publish.parse([bundleURL.path, "v1.0.0", "--dry-run"])
+    let command = try Publish.parse([bundleURL.path, "v1.0.0", "--dry-run", "--sign-identity", "-"])
     #expect(throws: ExitCode(1)) {
         try command.run()
     }

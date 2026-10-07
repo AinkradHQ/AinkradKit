@@ -1,26 +1,26 @@
 DEVELOPER_DIR ?= /Applications/Xcode.app/Contents/Developer
 export DEVELOPER_DIR
-# The sideload directory is `<cacheRoot>/DevPlugins`, and cacheRoot is
-# `~/Library/Application Support/<bundle-id>/Cache` (AinkradHome.defaultCacheRoot).
-# It is deliberately NOT under the user's Ainkrad Home: dev plugin bundles are
-# rebuildable machine state, not vault data. Must stay in step with the host's
-# own Makefile and AppEnvironment+BootstrapStores' scan list.
+# `<cacheRoot>/DevPlugins`, scanned by Debug hosts only (AppEnvironment+BootstrapStores,
+# PluginTrust.scansDevPluginsDirectory); cacheRoot is AinkradHome.defaultCacheRoot.
 DEV_PLUGINS := $(HOME)/Library/Application Support/com.ainkrad.app/Cache/DevPlugins
+XCODEBUILD := xcodebuild -scheme TemplatePlugin -derivedDataPath build -destination 'platform=macOS'
 
 generate: ; xcodegen generate
-build: generate ; xcodebuild -scheme TemplatePlugin -configuration Debug -derivedDataPath build -destination 'platform=macOS' build
+build: lint generate ; $(XCODEBUILD) -configuration Debug build
+test: lint generate ; $(XCODEBUILD) -configuration Debug test
+releasebuild: generate ; $(XCODEBUILD) -configuration Release build
 sideload: build
 	mkdir -p "$(DEV_PLUGINS)"
 	rm -rf "$(DEV_PLUGINS)/TemplatePlugin.bundle"
 	cp -R build/Build/Products/Debug/TemplatePlugin.bundle "$(DEV_PLUGINS)/TemplatePlugin.bundle"
-# Publishing goes through `ainkrad publish` and nowhere else.
-#
-# This target used to call a bundled release script that assembled its own
-# ainkrad-plugin.json by hand — hardcoding "apiVersion": 1, which the host
-# REJECTS (the supported range starts at the current generation), and omitting
-# "author" entirely. It was a second publish path producing manifests the
-# host's StorePolicy refuses, sitting right beside the validated one, and it
-# was the reason the installer needed an `author == nil` grandfather clause.
-# Deleted. `ainkrad publish` runs the same validation the store does.
-release: releasebuild ; ainkrad publish build/Build/Products/Release/TemplatePlugin.bundle $(V)
-releasebuild: generate ; xcodebuild -scheme TemplatePlugin -configuration Release -derivedDataPath build -destination 'platform=macOS' build
+# Publishing goes through `ainkrad publish` and nowhere else: it validates the
+# bundle as the store does, signs it ($SIGN_IDENTITY, or --sign-identity in
+# PUBLISH_FLAGS), creates the GitHub Release and lists it in AinkradCatalog.
+#   SIGN_IDENTITY="Developer ID Application: ..." make release V=v1.0.0
+#   make release V=v1.0.0 PUBLISH_FLAGS="--dry-run --sign-identity -"   # plan only
+AINKRAD ?= ainkrad
+release: releasebuild ; $(AINKRAD) publish build/Build/Products/Release/TemplatePlugin.bundle $(V) $(PUBLISH_FLAGS)
+
+.PHONY: generate build test releasebuild sideload release
+
+include scripts/guardrails.mk

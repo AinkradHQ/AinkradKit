@@ -2,41 +2,8 @@ import AinkradAppKit
 import ArgumentParser
 import Foundation
 import Testing
+
 @testable import ainkrad
-
-/// Golden `.bundle` fixtures for `ainkrad validate`: a real directory on
-/// disk with a `Contents/Info.plist`, written with `PropertyListSerialization`
-/// so no actual Xcode build is needed to exercise the validation path.
-private func makeGoldenBundle(infoDictionary: [String: Any]) throws -> URL {
-    let bundleURL = FileManager.default.temporaryDirectory
-        .appendingPathComponent("ainkrad-validate-tests-\(UUID().uuidString).bundle")
-    let contentsURL = bundleURL.appendingPathComponent("Contents")
-    try FileManager.default.createDirectory(at: contentsURL, withIntermediateDirectories: true)
-
-    let data = try PropertyListSerialization.data(
-        fromPropertyList: infoDictionary, format: .xml, options: 0
-    )
-    try data.write(to: contentsURL.appendingPathComponent("Info.plist"))
-
-    return bundleURL
-}
-
-/// A complete, valid Info.plist dictionary built against the CLI's own
-/// target generation (`AinkradAppKit.apiVersion`), with every key overridable
-/// so individual tests can knock one out.
-private func validInfoDictionary(overrides: [String: Any] = [:], removing: Set<String> = []) -> [String: Any] {
-    var dict: [String: Any] = [
-        PluginInfoKey.appID: "com.example.widget",
-        PluginInfoKey.displayName: "Example Widget",
-        PluginInfoKey.iconSymbol: "star.fill",
-        PluginInfoKey.apiVersion: AinkradAppKit.apiVersion,
-        PluginInfoKey.principalClass: "WidgetApp",
-        "CFBundleExecutable": "ExampleWidget",
-    ]
-    for (key, value) in overrides { dict[key] = value }
-    for key in removing { dict.removeValue(forKey: key) }
-    return dict
-}
 
 @Test func validateSucceedsOnAValidGoldenBundle() throws {
     let bundleURL = try makeGoldenBundle(infoDictionary: validInfoDictionary())
@@ -96,10 +63,11 @@ private func validInfoDictionary(overrides: [String: Any] = [:], removing: Set<S
 }
 
 @Test func validateWithStoreFlagRunsBaseChecksAndDoesNotThrowOnAValidBundle() throws {
-    let bundleURL = try makeGoldenBundle(infoDictionary: validInfoDictionary(overrides: [
-        PluginInfoKey.author: "Jane Developer",
-        PluginInfoKey.description: "A short description of what this app does.",
-    ]))
+    let bundleURL = try makeGoldenBundle(
+        infoDictionary: validInfoDictionary(overrides: [
+            PluginInfoKey.author: "Jane Developer",
+            PluginInfoKey.description: "A short description of what this app does.",
+        ]))
     defer { try? FileManager.default.removeItem(at: bundleURL) }
 
     let command = try Validate.parse([bundleURL.path, "--store"])
@@ -108,10 +76,11 @@ private func validInfoDictionary(overrides: [String: Any] = [:], removing: Set<S
 }
 
 @Test func storeIssuesOnACompleteBundleReturnsNoIssues() throws {
-    let bundleURL = try makeGoldenBundle(infoDictionary: validInfoDictionary(overrides: [
-        PluginInfoKey.author: "Jane Developer",
-        PluginInfoKey.description: "A short description of what this app does.",
-    ]))
+    let bundleURL = try makeGoldenBundle(
+        infoDictionary: validInfoDictionary(overrides: [
+            PluginInfoKey.author: "Jane Developer",
+            PluginInfoKey.description: "A short description of what this app does.",
+        ]))
     defer { try? FileManager.default.removeItem(at: bundleURL) }
 
     let issues = try Validate.storeIssues(bundleURL: bundleURL, inspector: BundleInspector())
@@ -119,9 +88,10 @@ private func validInfoDictionary(overrides: [String: Any] = [:], removing: Set<S
 }
 
 @Test func storeIssuesOnABundleMissingAuthorReportsMissingAuthor() throws {
-    let bundleURL = try makeGoldenBundle(infoDictionary: validInfoDictionary(overrides: [
-        PluginInfoKey.description: "A short description of what this app does.",
-    ]))
+    let bundleURL = try makeGoldenBundle(
+        infoDictionary: validInfoDictionary(overrides: [
+            PluginInfoKey.description: "A short description of what this app does."
+        ]))
     defer { try? FileManager.default.removeItem(at: bundleURL) }
 
     let issues = try Validate.storeIssues(bundleURL: bundleURL, inspector: BundleInspector())
@@ -129,9 +99,10 @@ private func validInfoDictionary(overrides: [String: Any] = [:], removing: Set<S
 }
 
 @Test func validateWithStoreFlagFailsOnABundleMissingAuthor() throws {
-    let bundleURL = try makeGoldenBundle(infoDictionary: validInfoDictionary(overrides: [
-        PluginInfoKey.description: "A short description of what this app does.",
-    ]))
+    let bundleURL = try makeGoldenBundle(
+        infoDictionary: validInfoDictionary(overrides: [
+            PluginInfoKey.description: "A short description of what this app does."
+        ]))
     defer { try? FileManager.default.removeItem(at: bundleURL) }
 
     let command = try Validate.parse([bundleURL.path, "--store"])

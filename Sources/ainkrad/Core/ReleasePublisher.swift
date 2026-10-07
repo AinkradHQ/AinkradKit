@@ -8,13 +8,10 @@ struct ReleasePublisherError: Error, CustomStringConvertible {
     let description: String
 }
 
-/// Packages a built `.bundle` into the exact asset pair the real host's
-/// `GitHubReleasesCatalogSource` consumes — `<appID>.bundle.zip` +
-/// `ainkrad-plugin.json` — and creates the GitHub Release carrying them.
-///
-/// Asset names and the zip invocation mirror the template's
-/// `scripts/release.sh` verbatim, so a bundle packaged here lands on disk
-/// identically to what the template's shell script would produce.
+/// Packages a built `.bundle` into its release asset — `<appID>.bundle.zip` —
+/// and the AinkradCatalog entry that lists it (`RemoteCatalogSource` format,
+/// decision 20), and creates the GitHub Release carrying the zip. This is the
+/// template's only release path: its `make release` calls `ainkrad publish`.
 struct ReleasePublisher {
     private let inspector: BundleInspector
 
@@ -22,20 +19,16 @@ struct ReleasePublisher {
         self.inspector = inspector
     }
 
-    /// Zips `bundle` with `ditto`, computes the zip's SHA-256, and writes a
-    /// `PluginManifest`-shaped `ainkrad-plugin.json` next to it — both into
-    /// a fresh temporary output directory. Returns both asset URLs.
+    /// Zips `bundle` with `ditto` into a fresh temporary directory, hashes the
+    /// zip, and builds its catalog entry for release `tag` of `sourceRepo`.
     ///
-    /// Field sourcing is entirely from the bundle's own `Contents/Info.plist`
-    /// (via `BundleInspector`, the SAME parse the host runs), so a bundle
-    /// that inspects clean also publishes with matching identity: `id` ←
-    /// `AinkradAppID`, `name` ← `AinkradDisplayName`, `icon` ←
-    /// `AinkradIconSymbol`, `apiVersion` ← `AinkradAPIVersion`. `description`
-    /// is read from the Info.plist's `description` key when present, else
-    /// defaults to `""` — it is a required field on the host's decodable, so
-    /// it must always be present in the JSON. `author` ← `PluginInfoKey.author`
-    /// (`AinkradAuthor`), an optional field on the host's decodable.
-    func package(bundle: URL) throws -> (zip: URL, manifest: URL) {
+    /// Identity comes entirely from the bundle's own `Contents/Info.plist`
+    /// (via `BundleInspector`, the SAME parse the host runs): `appID` ←
+    /// `AinkradAppID`, `displayName` ← `AinkradDisplayName`, `icon` ←
+    /// `AinkradIconSymbol`, `apiVersion` ← `AinkradAPIVersion`, `author` ←
+    /// `AinkradAuthor`, `description` ← `description` (`""` when absent — it
+    /// is required on the host's decodable).
+    func package(bundle: URL, tag: String, sourceRepo: String) throws -> (zip: URL, entry: CatalogEntryRecord) {
         let (metadata, infoDictionary) = try inspector.metadata(at: bundle)
 
         let outputDirectory = FileManager.default.temporaryDirectory
@@ -45,34 +38,29 @@ struct ReleasePublisher {
         let zipURL = outputDirectory.appendingPathComponent("\(metadata.appID).bundle.zip")
         try ReleasePublisher.ditto(bundle: bundle, to: zipURL)
 
-        let sha256 = try ReleasePublisher.sha256Hex(of: zipURL)
-
-        let description = infoDictionary["description"] as? String ?? ""
-        let author = infoDictionary[PluginInfoKey.author] as? String
-        let manifest = PublishedManifest(
-            id: metadata.appID,
-            name: metadata.displayName,
+        let entry = CatalogEntryRecord(
+            appID: metadata.appID,
+            displayName: metadata.displayName,
             icon: metadata.iconSymbol,
-            description: description,
+            description: infoDictionary[PluginInfoKey.description] as? String ?? "",
+            version: tag,
             apiVersion: metadata.apiVersion,
-            sha256: sha256,
-            author: author
+            downloadURL: CatalogEntryRecord.downloadURL(sourceRepo: sourceRepo, version: tag, appID: metadata.appID),
+            sha256: try ReleasePublisher.sha256Hex(of: zipURL),
+            sourceRepo: sourceRepo,
+            author: infoDictionary[PluginInfoKey.author] as? String
         )
-
-        let manifestURL = outputDirectory.appendingPathComponent("ainkrad-plugin.json")
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        let data = try encoder.encode(manifest)
-        try data.write(to: manifestURL)
-
-        return (zip: zipURL, manifest: manifestURL)
+        return (zip: zipURL, entry: entry)
     }
 
-    /// Shells `gh release create <tag> <assets...>`, mirroring the
-    /// template's `release.sh` invocation. This is the only networked part
-    /// of publishing; callers gate it behind `--dry-run`.
-    func release(tag: String, assets: [URL]) throws {
-        guard let gh = Environment().find("gh") else {
+    /// Shells `gh release create <tag> --target <commit> <assets...>`. Networked,
+    /// like the catalog push; callers gate both behind `--dry-run`. `target` pins
+    /// the tag to the commit that was built — without it `gh` tags the default
+    /// branch head, which shipped a mismatched host release once (v0.17.1).
+    func release(
+        tag: String, target: String? = nil, assets: [URL], environment: Environment = Environment()
+    ) throws {
+        guard let gh = environment.find("gh") else {
             throw ReleasePublisherError(description: "gh not found on PATH.")
         }
 
@@ -81,7 +69,7 @@ struct ReleasePublisher {
         // code was still in `waitUntilExit` — a publish that hung forever.
         let result: ProcessRunner.Result
         do {
-            result = try ProcessRunner.run(gh, arguments: ["release", "create", tag] + assets.map(\.path))
+            result = try ProcessRunner.run(gh, arguments: ["release", "create", tag] + (target.map { ["--target", $0] } ?? []) + assets.map(\.path))
         } catch {
             throw ReleasePublisherError(description: "Failed to launch gh release create: \(error)")
         }
@@ -92,8 +80,8 @@ struct ReleasePublisher {
         }
     }
 
-    /// Runs `/usr/bin/ditto -c -k --keepParent <bundle> <zipURL>`, matching
-    /// the template's `release.sh` invocation exactly.
+    /// Runs `/usr/bin/ditto -c -k --keepParent <bundle> <zipURL>`, so the zip
+    /// unpacks to `<Name>.bundle` itself.
     private static func ditto(bundle: URL, to zipURL: URL) throws {
         // Same reason as `release` above — `ditto` reports per-file progress on
         // stderr, so a bundle with enough files deadlocked the old raw-pipe form.
@@ -107,8 +95,8 @@ struct ReleasePublisher {
         }
         guard result.succeeded else {
             throw ReleasePublisherError(
-                description: "ditto \(bundle.path) -> \(zipURL.path) failed " +
-                    "(exit \(result.exitCode)): \(result.standardError)"
+                description: "ditto \(bundle.path) -> \(zipURL.path) failed "
+                    + "(exit \(result.exitCode)): \(result.standardError)"
             )
         }
     }
@@ -120,23 +108,4 @@ struct ReleasePublisher {
         let digest = SHA256.hash(data: data)
         return digest.map { String(format: "%02x", $0) }.joined()
     }
-}
-
-/// The exact JSON shape the host's `GitHubReleasesCatalogSource` decodes
-/// the `ainkrad-plugin.json` asset into (see
-/// `Ainkrad/Sources/Ainkrad/Core/AppStore/CatalogModel.swift`'s
-/// `PluginManifest`). Named distinctly here since this target only ever
-/// WRITES this shape; the four optional fields the host also accepts
-/// (`author`, `longDescription`, `screenshots`, `links`) are omitted, which
-/// is legal since they're all optional there. `author` is now emitted (this
-/// task); the remaining three (`longDescription`, `screenshots`, `links`)
-/// stay omitted.
-private struct PublishedManifest: Codable {
-    let id: String
-    let name: String
-    let icon: String
-    let description: String
-    let apiVersion: Int
-    let sha256: String
-    let author: String?
 }

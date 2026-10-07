@@ -25,7 +25,7 @@ struct Validate: ParsableCommand {
         do {
             try Validate.check(bundleURL: bundleURL, inspector: BundleInspector())
         } catch {
-            print(Validate.message(for: error))
+            printError(Validate.message(for: error))
             throw ExitCode(1)
         }
 
@@ -35,7 +35,7 @@ struct Validate: ParsableCommand {
                 print("\(bundlePath) passed App Store submission checks.")
             } else {
                 for issue in issues {
-                    print("\(issue.code): \(issue.message)")
+                    printError("\(issue.code): \(issue.message)")
                 }
                 throw ExitCode(1)
             }

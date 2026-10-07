@@ -3,90 +3,42 @@ import ArgumentParser
 import CryptoKit
 import Foundation
 import Testing
+
 @testable import ainkrad
 
-// The EXACT decodable the real host's `GitHubReleasesCatalogSource` decodes
-// the published `ainkrad-plugin.json` asset into (copied verbatim from
-// `Ainkrad/Sources/Ainkrad/Core/AppStore/CatalogModel.swift`'s
-// `PluginManifest`), so this test proves the asset we write decodes cleanly
-// into what the real host expects — not just into our own writer's shape.
-private struct ManifestLink: Codable, Equatable {
-    let title: String
-    let url: URL
-}
-
-private struct PluginManifest: Codable, Equatable {
-    let id: String
-    let name: String
-    let icon: String
-    let description: String
-    let apiVersion: Int
-    let sha256: String
-    let author: String?
-    let longDescription: String?
-    let screenshots: [URL]?
-    let links: [ManifestLink]?
-}
-
-/// A golden `.bundle` fixture: a real directory on disk with a
-/// `Contents/Info.plist`, written with `PropertyListSerialization` so no
-/// actual Xcode build is needed to exercise packaging.
-private func makeGoldenBundle(infoDictionary: [String: Any]) throws -> URL {
-    let bundleURL = FileManager.default.temporaryDirectory
-        .appendingPathComponent("ainkrad-publish-tests-\(UUID().uuidString).bundle")
-    let contentsURL = bundleURL.appendingPathComponent("Contents")
-    try FileManager.default.createDirectory(at: contentsURL, withIntermediateDirectories: true)
-
-    let data = try PropertyListSerialization.data(
-        fromPropertyList: infoDictionary, format: .xml, options: 0
-    )
-    try data.write(to: contentsURL.appendingPathComponent("Info.plist"))
-
-    return bundleURL
-}
-
-private func validInfoDictionary(overrides: [String: Any] = [:], removing: Set<String> = []) -> [String: Any] {
-    var dict: [String: Any] = [
-        PluginInfoKey.appID: "com.example.widget",
-        PluginInfoKey.displayName: "Example Widget",
-        PluginInfoKey.iconSymbol: "star.fill",
-        PluginInfoKey.apiVersion: AinkradAppKit.apiVersion,
-        PluginInfoKey.principalClass: "WidgetApp",
-        "CFBundleExecutable": "ExampleWidget",
-    ]
-    for (key, value) in overrides { dict[key] = value }
-    for key in removing { dict.removeValue(forKey: key) }
-    return dict
-}
-
-@Test func packageProducesAZipAndAManifestThatDecodesIntoTheHostsShape() throws {
-    let bundleURL = try makeGoldenBundle(infoDictionary: validInfoDictionary(overrides: [
-        PluginInfoKey.author: "Jane Developer",
-    ]))
+@Test func packageProducesAZipAndACatalogEntryThatDecodesIntoTheHostsShape() throws {
+    let bundleURL = try makeGoldenBundle(
+        infoDictionary: validInfoDictionary(overrides: [
+            PluginInfoKey.author: "Jane Developer"
+        ]))
     defer { try? FileManager.default.removeItem(at: bundleURL) }
 
-    let publisher = ReleasePublisher()
-    let (zip, manifest) = try publisher.package(bundle: bundleURL)
-    defer {
-        try? FileManager.default.removeItem(at: zip.deletingLastPathComponent())
-    }
+    let (zip, entry) = try ReleasePublisher().package(
+        bundle: bundleURL, tag: "v1.2.3", sourceRepo: "AinkradHQ/AinkradWidget")
+    defer { try? FileManager.default.removeItem(at: zip.deletingLastPathComponent()) }
 
     #expect(zip.lastPathComponent == "com.example.widget.bundle.zip")
-    #expect(manifest.lastPathComponent == "ainkrad-plugin.json")
     #expect(FileManager.default.fileExists(atPath: zip.path))
-    #expect(FileManager.default.fileExists(atPath: manifest.path))
+    // The old `GitHubReleasesCatalogSource` asset is gone (decision 20).
+    #expect(
+        !FileManager.default.fileExists(
+            atPath: zip.deletingLastPathComponent().appendingPathComponent("ainkrad-plugin.json").path))
 
-    let manifestData = try Data(contentsOf: manifest)
-    let decoded = try JSONDecoder().decode(PluginManifest.self, from: manifestData)
+    let decoded = try JSONDecoder().decode(HostCatalogEntry.self, from: Data(try entry.json().utf8))
 
-    #expect(decoded.id == "com.example.widget")
-    #expect(decoded.name == "Example Widget")
+    #expect(decoded.appID == "com.example.widget")
+    #expect(decoded.displayName == "Example Widget")
     #expect(decoded.icon == "star.fill")
     #expect(decoded.description == "")
+    #expect(decoded.version == "v1.2.3")
     #expect(decoded.apiVersion == AinkradAppKit.apiVersion)
+    #expect(decoded.sourceRepo == "AinkradHQ/AinkradWidget")
+    #expect(
+        decoded.downloadURL.absoluteString
+            == "https://github.com/AinkradHQ/AinkradWidget/releases/download/v1.2.3/com.example.widget.bundle.zip")
     #expect(decoded.author == "Jane Developer")
 
-    // The manifest's sha256 must match an INDEPENDENTLY computed SHA-256 of
+    // The entry's sha256 must match an INDEPENDENTLY computed SHA-256 of
     // the produced zip, not just whatever the writer happened to compute.
     let zipData = try Data(contentsOf: zip)
     let expectedSHA = SHA256.hash(data: zipData).map { String(format: "%02x", $0) }.joined()
@@ -99,7 +51,7 @@ private func validInfoDictionary(overrides: [String: Any] = [:], removing: Set<S
     )
     defer { try? FileManager.default.removeItem(at: bundleURL) }
 
-    let command = try Publish.parse([bundleURL.path, "v1.0.0", "--dry-run"])
+    let command = try Publish.parse([bundleURL.path, "v1.0.0", "--dry-run", "--sign-identity", "-"])
     #expect(throws: ExitCode(1)) {
         try command.run()
     }
@@ -109,13 +61,14 @@ private func validInfoDictionary(overrides: [String: Any] = [:], removing: Set<S
     // Must be a STORE-complete bundle (author + description), not just
     // base-valid: since publish now also enforces `StorePolicy`, a bundle
     // missing either would be refused before reaching this assertion.
-    let bundleURL = try makeGoldenBundle(infoDictionary: validInfoDictionary(overrides: [
-        PluginInfoKey.author: "Jane Developer",
-        PluginInfoKey.description: "A short description of what this app does.",
-    ]))
+    let bundleURL = try makeGoldenBundle(
+        infoDictionary: validInfoDictionary(overrides: [
+            PluginInfoKey.author: "Jane Developer",
+            PluginInfoKey.description: "A short description of what this app does.",
+        ]))
     defer { try? FileManager.default.removeItem(at: bundleURL) }
 
-    let command = try Publish.parse([bundleURL.path, "v1.0.0", "--dry-run"])
+    let command = try Publish.parse([bundleURL.path, "v1.0.0", "--dry-run", "--sign-identity", "-"])
     // Must not throw: dry-run packages but never shells out to `gh`, so
     // this must succeed fully offline.
     try command.run()
@@ -129,16 +82,81 @@ private func validInfoDictionary(overrides: [String: Any] = [:], removing: Set<S
     // below, mirroring how `publishDryRunRefusesAnInvalidBundleWithoutProducingAnyAssets`
     // proves the base-validation refusal without a flaky filesystem scan
     // under parallel test execution).
-    let bundleURL = try makeGoldenBundle(infoDictionary: validInfoDictionary(overrides: [
-        PluginInfoKey.description: "A short description of what this app does.",
-    ]))
+    let bundleURL = try makeGoldenBundle(
+        infoDictionary: validInfoDictionary(overrides: [
+            PluginInfoKey.description: "A short description of what this app does."
+        ]))
     defer { try? FileManager.default.removeItem(at: bundleURL) }
 
     let issues = try Validate.storeIssues(bundleURL: bundleURL, inspector: BundleInspector())
     #expect(issues.map(\.code) == ["missing-author"])
 
-    let command = try Publish.parse([bundleURL.path, "v1.0.0", "--dry-run"])
+    let command = try Publish.parse([bundleURL.path, "v1.0.0", "--dry-run", "--sign-identity", "-"])
     #expect(throws: ExitCode(1)) {
         try command.run()
+    }
+}
+
+/// `release` against a fake `gh` that records its arguments — never the real
+/// one, and never the network.
+@Suite("ReleasePublisher.release")
+struct ReleaseTests {
+    private func fakeGH(exitCode: Int32) throws -> (env: Environment, log: URL, dir: URL) {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ainkrad-release-tests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let log = dir.appendingPathComponent("args.log")
+        let gh = dir.appendingPathComponent("gh")
+        try "#!/bin/sh\necho \"$@\" > '\(log.path)'\necho 'upload refused' >&2\nexit \(exitCode)\n"
+            .write(to: gh, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: gh.path)
+        let env = Environment(find: { $0 == "gh" ? gh : nil }, xcodePresent: true)
+        return (env, log, dir)
+    }
+
+    @Test("creates the release with the tag and every asset")
+    func createsRelease() throws {
+        let (env, log, dir) = try fakeGH(exitCode: 0)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        try ReleasePublisher().release(
+            tag: "v1.2.3",
+            assets: [URL(fileURLWithPath: "/a/ainkrad-plugin.json"), URL(fileURLWithPath: "/a/x.bundle.zip")],
+            environment: env)
+
+        let args = try String(contentsOf: log, encoding: .utf8)
+        #expect(args == "release create v1.2.3 /a/ainkrad-plugin.json /a/x.bundle.zip\n")
+    }
+
+    @Test("pins the tag to the built commit with --target")
+    func releasePinsTarget() throws {
+        let (env, log, dir) = try fakeGH(exitCode: 0)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        try ReleasePublisher().release(
+            tag: "v1", target: "abc123", assets: [URL(fileURLWithPath: "/a/x.bundle.zip")], environment: env)
+
+        let args = try String(contentsOf: log, encoding: .utf8)
+        #expect(args == "release create v1 --target abc123 /a/x.bundle.zip\n")
+    }
+
+    @Test("a failing gh throws with its exit code and stderr")
+    func failingGHThrows() throws {
+        let (env, _, dir) = try fakeGH(exitCode: 3)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let error = try #require(throws: ReleasePublisherError.self) {
+            try ReleasePublisher().release(tag: "v1", assets: [], environment: env)
+        }
+        #expect(error.description.contains("exit 3"))
+        #expect(error.description.contains("upload refused"))
+    }
+
+    @Test("no gh on PATH throws before anything runs")
+    func missingGHThrows() {
+        let env = Environment(find: { _ in nil }, xcodePresent: true)
+        #expect(throws: ReleasePublisherError.self) {
+            try ReleasePublisher().release(tag: "v1", assets: [], environment: env)
+        }
     }
 }

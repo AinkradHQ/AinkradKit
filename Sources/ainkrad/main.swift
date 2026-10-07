@@ -8,12 +8,12 @@
 import ArgumentParser
 
 do {
-  var command = try await Ainkrad.asyncParseAsRoot()
-  if var asyncCommand = command as? AsyncParsableCommand {
-    try await asyncCommand.run()
-  } else {
-    try command.run()
-  }
+    var command = try await Ainkrad.asyncParseAsRoot()
+    if var asyncCommand = command as? AsyncParsableCommand {
+        try await asyncCommand.run()
+    } else {
+        try command.run()
+    }
 } catch {
-  Ainkrad.exit(withError: error)
+    Ainkrad.exit(withError: error)
 }

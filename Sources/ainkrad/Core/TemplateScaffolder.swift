@@ -21,6 +21,23 @@ struct TemplateScaffolder {
     /// in `Package.swift` (`.copy("Resources/Template")`).
     private static let templateResourceName = "Template"
 
+    /// The on-disk URL of the embedded template directory, as served by
+    /// this target's resource bundle. Exposed (internal) so `ScaffolderTests`
+    /// can compare scaffolded output byte-for-byte against the embedded
+    /// copies it came from.
+    static func embeddedTemplateURL() throws -> URL {
+        guard
+            let templateURL = Bundle.module.url(
+                forResource: TemplateScaffolder.templateResourceName, withExtension: nil
+            )
+        else {
+            throw TemplateScaffolderError(
+                description: "Embedded template resources not found in the ainkrad bundle."
+            )
+        }
+        return templateURL
+    }
+
     func scaffold(
         name: String,
         id: String,
@@ -30,24 +47,18 @@ struct TemplateScaffolder {
     ) throws {
         guard PluginValidation.isValidAppID(id) else {
             throw TemplateScaffolderError(
-                description: "Invalid app id \"\(id)\": must be non-empty, not \".\" or \"..\", " +
-                    "and contain only letters, digits, '.', '_', or '-'."
+                description: "Invalid app id \"\(id)\": must be non-empty, not \".\" or \"..\", "
+                    + "and contain only letters, digits, '.', '_', or '-'."
             )
         }
         guard TemplateScaffolder.isValidSwiftIdentifier(name) else {
             throw TemplateScaffolderError(
-                description: "Invalid app name \"\(name)\": must be a valid Swift type " +
-                    "identifier (used as the app's struct, entry-point class, and target name)."
+                description: "Invalid app name \"\(name)\": must be a valid Swift type "
+                    + "identifier (used as the app's struct, entry-point class, and target name)."
             )
         }
 
-        guard let templateURL = Bundle.module.url(
-            forResource: TemplateScaffolder.templateResourceName, withExtension: nil
-        ) else {
-            throw TemplateScaffolderError(
-                description: "Embedded template resources not found in the ainkrad bundle."
-            )
-        }
+        let templateURL = try Self.embeddedTemplateURL()
 
         let fileManager = FileManager.default
 
@@ -62,7 +73,11 @@ struct TemplateScaffolder {
         // Only files the template would actually write are checked: an empty
         // directory, or one holding unrelated files (a README, a .git), is
         // still a legitimate target.
+        let replacements = TemplateScaffolder.substitutions(
+            name: name, id: id, displayName: displayName, icon: icon
+        )
         let existing = try TemplateScaffolder.templateRelativePaths(under: templateURL, fileManager: fileManager)
+            .map { Self.applySubstitutions(to: $0, replacements: replacements) }
             .filter { fileManager.fileExists(atPath: destination.appendingPathComponent($0).path) }
         guard existing.isEmpty else {
             throw TemplateScaffolderError(
@@ -74,13 +89,17 @@ struct TemplateScaffolder {
 
         try fileManager.createDirectory(at: destination, withIntermediateDirectories: true)
 
-        let replacements = TemplateScaffolder.substitutions(
-            name: name, id: id, displayName: displayName, icon: icon
-        )
-
         try TemplateScaffolder.copyAndSubstitute(
             from: templateURL, to: destination, replacements: replacements, fileManager: fileManager
         )
+
+        // SPM `.copy` resources may lose the exec bit on the way into the
+        // bundle, so a scaffolded `scripts/design-lint.sh` could arrive
+        // non-executable. Everything under scripts/ is either run directly
+        // (design-lint.sh, the pre-push hook, the self-tests) or sourced by
+        // something that is — restore 0755 explicitly rather than trusting
+        // whatever permission bits the bundle happened to serve.
+        try TemplateScaffolder.makeScriptsExecutable(root: destination, fileManager: fileManager)
     }
 
     /// A valid Swift type identifier: starts with a letter or underscore,
@@ -107,8 +126,10 @@ struct TemplateScaffolder {
     /// Sequential passes would re-scan and corrupt text a prior pass just
     /// inserted; a single scan that only ever advances past *source* text
     /// cannot.
-    /// The placeholder revision written in the template's `project.yml`.
-    /// Never resolved by SwiftPM — it exists only to be replaced.
+    /// The placeholder revision `scripts/sync-template.sh` writes over the
+    /// standalone template's real pin in the embedded `project.yml` (the
+    /// script repeats this literal). Never resolved by SwiftPM — it exists
+    /// only to be replaced.
     static let templateSDKRevision = "60036ad9abe5d0ca4e84109bcc78a51f7b8578f0"
 
     /// The SDK revision a freshly scaffolded app pins.
@@ -116,7 +137,7 @@ struct TemplateScaffolder {
     /// Must equal the revision this CLI itself is built against, or a new app
     /// links a different SDK than the tool that made it. `ScaffolderTests`
     /// reads Package.swift and asserts exactly that.
-    static let sdkRevision = "2d8c31d08fae964901904f5232b58c5c142d706e"
+    static let sdkRevision = "f4fcb8f5d6fe3c0b49a14b72fd7ed6cb219d45be"
 
     private static func substitutions(
         name: String, id: String, displayName: String, icon: String
@@ -126,7 +147,9 @@ struct TemplateScaffolder {
                 token: "<key>AinkradAPIVersion</key><integer>1</integer>",
                 replacement: "<key>AinkradAPIVersion</key><integer>\(AinkradAppKit.apiVersion)</integer>"
             ),
-            (token: "\"apiVersion\": 1,", replacement: "\"apiVersion\": \(AinkradAppKit.apiVersion),"),
+            // The generated .xcodeproj takes its name from this line. Matched
+            // with its key so the bare word is free to appear in comments.
+            (token: "name: AinkradPluginTemplate", replacement: "name: \(name)"),
             // The SDK revision the scaffolded project PINS.
             //
             // Substituted rather than left as the template's literal, because
@@ -145,6 +168,7 @@ struct TemplateScaffolder {
             (token: "puzzlepiece.extension", replacement: icon),
             (token: "MyPluginEntryPoint", replacement: "\(name)EntryPoint"),
             (token: "TemplatePlugin", replacement: name),
+            (token: "TemplateFeature", replacement: "\(name)Feature"),
             (token: "My Plugin", replacement: displayName),
             (token: "myplugin", replacement: id),
             (token: "MyApp", replacement: name),
@@ -200,7 +224,10 @@ struct TemplateScaffolder {
             at: source, includingPropertiesForKeys: [.isDirectoryKey]
         )
         for item in items {
-            let target = destination.appendingPathComponent(item.lastPathComponent)
+            // Names carry tokens too (`Sources/TemplatePlugin`,
+            // `Tests/TemplateFeatureTests`): project.yml points at the renamed paths.
+            let target = destination.appendingPathComponent(
+                applySubstitutions(to: item.lastPathComponent, replacements: replacements))
             let isDirectory = (try? item.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
 
             if isDirectory {
@@ -211,6 +238,25 @@ struct TemplateScaffolder {
             } else {
                 try substituteFile(from: item, to: target, replacements: replacements, fileManager: fileManager)
             }
+        }
+    }
+
+    /// Restores the executable bit on every file under the scaffolded
+    /// `scripts/` directory (including `scripts/git-hooks/pre-push`). Called
+    /// by `scaffold` — see the comment there.
+    private static func makeScriptsExecutable(root: URL, fileManager: FileManager) throws {
+        let scriptsURL = root.appendingPathComponent("scripts", isDirectory: true)
+        guard
+            let enumerator = fileManager.enumerator(
+                at: scriptsURL, includingPropertiesForKeys: [.isRegularFileKey]
+            )
+        else {
+            return
+        }
+        for case let url as URL in enumerator {
+            let values = try? url.resourceValues(forKeys: [.isRegularFileKey])
+            guard values?.isRegularFile == true else { continue }
+            try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
         }
     }
 

@@ -10,29 +10,65 @@ settings:
     CODE_SIGN_IDENTITY: "-"
     CODE_SIGNING_REQUIRED: NO
     CODE_SIGNING_ALLOWED: NO
+    EAGER_LINKING: NO
 packages:
   AinkradAppKit:
     url: https://github.com/AinkradHQ/AinkradAppKit
-    # `ainkrad new` fills this in with the SDK revision the CLI was built against.
+    # Must stay AT OR BEHIND the host's pin — the host embeds the one dynamic
+    # copy of the SDK, so a plugin built against a NEWER revision links symbols
+    # that copy does not define and dies at `Bundle.load()`. This matches the
+    # host's pin exactly: the settings-catalog merge, which is what
+    # `settingsCatalog(host:)` in Sources/TemplateFeature/PluginApp.swift needs.
     revision: 60036ad9abe5d0ca4e84109bcc78a51f7b8578f0
 targets:
+  TemplateFeature:
+    type: library.static
+    platform: macOS
+    sources: [Sources/TemplateFeature]
+    dependencies:
+      - package: AinkradAppKit
+        embed: false
   TemplatePlugin:
     type: bundle
     platform: macOS
-    sources: [Sources/Plugin]
+    sources: [Sources/TemplatePlugin]
     dependencies:
+      - target: TemplateFeature
       # AinkradAppKit is the ONLY shared dependency: dynamic + NOT embedded, so
       # the host's copy is used at runtime and protocol casts succeed. Any other
-      # runtime dependency must be statically linked (see README).
+      # runtime dependency must be statically linked (see the template guide,
+      # Docs/Reference/ainkradplugintemplate-readme.md in the Ainkrad workspace).
       - package: AinkradAppKit
         embed: false
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.example.plugin.myplugin
         GENERATE_INFOPLIST_FILE: NO
-        INFOPLIST_FILE: Sources/Plugin/Info.plist
+        INFOPLIST_FILE: Sources/TemplatePlugin/Info.plist
         MACH_O_TYPE: mh_bundle
         LD_RUNPATH_SEARCH_PATHS: "@executable_path/../Frameworks"
+        OTHER_LDFLAGS: ["-lTemplateFeature"]
+    postBuildScripts:
+      # Generate AinkradAPIVersion from the linked SDK rather than
+      # trusting the hand-typed value in Info.plist — see the script.
+      - script: "\"$SRCROOT/scripts/stamp-api-version.sh\""
+        name: Stamp AinkradAPIVersion
+        # The plist is an INPUT, not an output: declaring it makes the build
+        # system order this phase after the task that copies it into the
+        # bundle. Without it the script races that copy and finds nothing.
+        inputFiles:
+          - $(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)
+        # No outputs, so keep it running every build: the linked SDK revision
+        # can change generation without any source file changing.
+        basedOnDependencyAnalysis: false
+  TemplateFeatureTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources: [Tests/TemplateFeatureTests]
+    dependencies:
+      - target: TemplateFeature
+      - package: AinkradAppKit
 schemes:
   TemplatePlugin:
-    build: { targets: { TemplatePlugin: all } }
+    build: { targets: { TemplatePlugin: all, TemplateFeatureTests: [test] } }
+    test: { config: Debug, targets: [TemplateFeatureTests] }
