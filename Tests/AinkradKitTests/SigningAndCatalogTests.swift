@@ -153,6 +153,28 @@ struct CatalogEntryTests {
             app.links?.first?.url.absoluteString == "https://github.com/AinkradHQ/AinkradWidget/releases/tag/v1.2.3")
     }
 
+    @Test("a schema-2 catalog keeps its themes array and schemaVersion through an upsert")
+    func keepsThemesArray() throws {
+        let themes: [[String: Any]] = [[
+            "id": "glass", "kind": "theme", "displayName": "macOS Glass", "version": "1.0.0", "format": 1,
+            "files": [["url": "https://example.com/glass-dark.theme", "sha256": String(repeating: "b", count: 64)]],
+        ]]
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ainkrad-catalog-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try JSONSerialization.data(
+            withJSONObject: ["schemaVersion": 2, "apps": [], "themes": themes], options: [.prettyPrinted, .sortedKeys]
+        ).write(to: url)
+
+        try CatalogPublisher().apply(entry, toCatalogAt: url)
+
+        let after = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        #expect(after["schemaVersion"] as? Int == 2)
+        let keptThemes = try #require(after["themes"] as? [[String: Any]])
+        #expect(NSArray(array: keptThemes).isEqual(to: themes))
+        #expect((after["apps"] as? [[String: Any]])?.compactMap { $0["appID"] as? String } == ["widget"])
+    }
+
     @Test("two entries claiming one appID refuse the update and leave the file alone")
     func duplicateAppIDRefuses() throws {
         let duplicate: [String: Any] = ["appID": "widget"]
