@@ -137,7 +137,7 @@ struct TemplateScaffolder {
     /// Must equal the revision this CLI itself is built against, or a new app
     /// links a different SDK than the tool that made it. `ScaffolderTests`
     /// reads Package.swift and asserts exactly that.
-    static let sdkRevision = "74815106e95885d35b56729d51a788d447f84343"
+    static let sdkRevision = "966326c04cc4dcf174c1d0aacc35dc8eef130ccf"
 
     private static func substitutions(
         name: String, id: String, displayName: String, icon: String
