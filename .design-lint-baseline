@@ -15,6 +15,7 @@ force-cast 0
 force-unwrap 0
 print off the ainkrad CLI writes to stdout by design
 opacity-literal 0
-frame-literal 0
+frame-literal 1
 chamfer-literal 0
 motion-literal 0
+chamfer-direct 0

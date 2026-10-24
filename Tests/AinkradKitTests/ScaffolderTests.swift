@@ -99,7 +99,10 @@ private func makeTempDirectory() -> URL {
     // host from generation 9 onward -- and, more to the point, it can now
     // conform to `AinkradAppModes`. Left at 10, `ainkrad new` produced an app
     // that could not have a basic mode at all.
-    #expect(AinkradAppKit.apiVersion == 11)
+    // Moved 11 -> 12 with the pin to AinkradAppKit 636baa4 (Design Languages
+    // R1: material.kind, shape.style, HostTerminalPalette). Newly scaffolded
+    // apps now target generation 12; minSupportedAPIVersion is 10.
+    #expect(AinkradAppKit.apiVersion == 12)
     #expect((plist["AinkradAuthor"] as? String)?.isEmpty == false)
     #expect((plist["description"] as? String)?.isEmpty == false)
     #expect(plist["NSPrincipalClass"] as? String == "MyWidgetEntryPoint")
